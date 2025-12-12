@@ -390,6 +390,15 @@ export class MermaidPreviewPanel {
                 .replace(/\$/g, '\\$')
         );
         const appearanceClass = this._getAppearanceClass(appearance);
+        const mermaidScriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(
+                this._extensionUri,
+                'node_modules',
+                'mermaid',
+                'dist',
+                'mermaid.esm.min.mjs'
+            )
+        );
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -398,7 +407,7 @@ export class MermaidPreviewPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mermaid Preview</title>
     <script type="module">
-        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        import mermaid from '${mermaidScriptUri}';
 
         const vscode = acquireVsCodeApi();
         const diagrams = ${JSON.stringify(escapedDiagrams)};
