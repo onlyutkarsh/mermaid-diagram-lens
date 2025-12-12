@@ -1,0 +1,115 @@
+{
+  "name": "mermaid-preview",
+  "displayName": "Mermaid Preview with Themes",
+  "description": "Preview Mermaid diagrams with custom theme selection independent of VSCode theme",
+  "version": "0.0.1",
+  "publisher": "your-publisher-name",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "mermaid",
+    "preview",
+    "diagram",
+    "markdown",
+    "theme"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mermaid-preview.showPreview",
+        "title": "Mermaid: Open Preview",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "mermaid-preview.showPreviewToSide",
+        "title": "Mermaid: Open Preview to the Side",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "mermaid-preview.showDiagramAtPosition",
+        "title": "Mermaid: Preview This Diagram"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "mermaid-preview.showPreviewToSide",
+          "when": "editorLangId == markdown",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "mermaid-preview.showPreview",
+          "when": "editorLangId == markdown",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Mermaid Preview",
+      "properties": {
+        "mermaidPreview.theme": {
+          "type": "string",
+          "default": "default",
+          "enum": [
+            "default",
+            "dark",
+            "forest",
+            "neutral",
+            "base"
+          ],
+          "enumDescriptions": [
+            "Default Mermaid theme",
+            "Dark theme",
+            "Forest theme",
+            "Neutral theme",
+            "Base theme"
+          ],
+          "description": "Default theme for Mermaid diagrams"
+        },
+        "mermaidPreview.useVSCodeTheme": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically sync Mermaid theme with VSCode theme (dark/light)"
+        },
+        "mermaidPreview.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh preview on document changes"
+        },
+        "mermaidPreview.refreshDelay": {
+          "type": "number",
+          "default": 500,
+          "description": "Delay in milliseconds before refreshing preview after changes"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {}
+}
