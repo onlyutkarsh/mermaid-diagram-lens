@@ -91,6 +91,21 @@
           "type": "number",
           "default": 500,
           "description": "Delay in milliseconds before refreshing preview after changes"
+        },
+        "mermaidPreview.previewAppearance": {
+          "type": "string",
+          "default": "matchVSCode",
+          "enum": [
+            "matchVSCode",
+            "light",
+            "dark"
+          ],
+          "enumDescriptions": [
+            "Match VS Code's current color theme",
+            "Always use the light preview chrome",
+            "Always use the dark preview chrome"
+          ],
+          "description": "Appearance of the preview chrome regardless of VS Code theme"
         }
       }
     }
