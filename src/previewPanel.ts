@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 import { Logger } from './util/logger';
 
+type PreviewAppearance = 'matchVSCode' | 'light' | 'dark';
+type PreviewMode = 'all' | 'single';
+
 export class MermaidPreviewPanel {
     public static currentPanel: MermaidPreviewPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
@@ -9,6 +12,8 @@ export class MermaidPreviewPanel {
     private _disposables: vscode.Disposable[] = [];
     private _updateTimeout: NodeJS.Timeout | undefined;
     private _currentDocument: vscode.TextDocument | undefined;
+    private _mode: PreviewMode = 'all';
+    private _singleLine: number | undefined;
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -17,8 +22,8 @@ export class MermaidPreviewPanel {
     ) {
         // If we already have a panel, show it
         if (MermaidPreviewPanel.currentPanel) {
+            MermaidPreviewPanel.currentPanel._switchToAllMode(document);
             MermaidPreviewPanel.currentPanel._panel.reveal(viewColumn);
-            MermaidPreviewPanel.currentPanel.updateContent(document);
             return;
         }
 
@@ -37,7 +42,8 @@ export class MermaidPreviewPanel {
         MermaidPreviewPanel.currentPanel = new MermaidPreviewPanel(
             panel,
             extensionUri,
-            document
+            document,
+            'all'
         );
     }
 
@@ -59,26 +65,31 @@ export class MermaidPreviewPanel {
             }
         );
 
-        const instance = new MermaidPreviewPanel(
+        new MermaidPreviewPanel(
             panel,
             extensionUri,
-            document
+            document,
+            'single',
+            lineNumber
         );
-        instance.updateContentAtLine(document, lineNumber);
     }
 
     private constructor(
         panel: vscode.WebviewPanel,
         extensionUri: vscode.Uri,
-        document: vscode.TextDocument
+        document: vscode.TextDocument,
+        mode: PreviewMode,
+        singleLine?: number
     ) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._currentDocument = document;
         this._logger = Logger.instance;
+        this._mode = mode;
+        this._singleLine = singleLine;
 
         // Set the webview's initial html content
-        this._update();
+        this._render();
 
         // Listen for when the panel is disposed
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -106,6 +117,9 @@ export class MermaidPreviewPanel {
                         this._logger.logError('Webview reported export error', message.error ?? 'Unknown error');
                         vscode.window.showErrorMessage(`Failed to export diagram: ${message.error ?? 'Unknown error'}`);
                         break;
+                    case 'changeAppearance':
+                        this._handleAppearanceChange(message.appearance as PreviewAppearance);
+                        break;
                 }
             },
             null,
@@ -113,8 +127,37 @@ export class MermaidPreviewPanel {
         );
     }
 
+    private _setMode(mode: PreviewMode, lineNumber?: number) {
+        this._mode = mode;
+        this._singleLine = lineNumber;
+    }
+
+    private _switchToAllMode(document: vscode.TextDocument) {
+        this._currentDocument = document;
+        this._setMode('all');
+        this._render();
+    }
+
+    private _switchToSingleMode(document: vscode.TextDocument, lineNumber: number) {
+        this._currentDocument = document;
+        this._setMode('single', lineNumber);
+        this._renderSingle(lineNumber);
+    }
+
+    private _render(overrideTheme?: string) {
+        if (this._mode === 'single' && this._singleLine !== undefined) {
+            this._renderSingle(this._singleLine, overrideTheme);
+        } else {
+            this._renderAll(overrideTheme);
+        }
+    }
+
     public updateContent(document: vscode.TextDocument) {
         this._currentDocument = document;
+
+        if (this._mode !== 'all') {
+            return;
+        }
 
         // Clear existing timeout
         if (this._updateTimeout) {
@@ -127,44 +170,32 @@ export class MermaidPreviewPanel {
 
         // Debounce updates
         this._updateTimeout = setTimeout(() => {
-            this._update();
+            this._render();
         }, delay);
     }
 
     public updateContentAtLine(document: vscode.TextDocument, lineNumber: number) {
-        this._currentDocument = document;
-        const mermaidCode = this._extractMermaidCodeAtLine(document, lineNumber);
-
-        if (!mermaidCode) {
-            this._panel.webview.html = this._getErrorHtml('No Mermaid diagram found at this position.');
-            return;
-        }
-
-        // Get theme from config
-        const config = vscode.workspace.getConfiguration('mermaidPreview');
-        const useVSCodeTheme = config.get<boolean>('useVSCodeTheme', false);
-        const configuredTheme = config.get<string>('theme', 'default');
-
-        let theme = configuredTheme;
-
-        // If useVSCodeTheme is enabled, determine theme based on VSCode theme
-        if (useVSCodeTheme) {
-            const colorTheme = vscode.window.activeColorTheme;
-            theme = colorTheme.kind === vscode.ColorThemeKind.Dark ? 'dark' : 'default';
-        }
-
-        this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, mermaidCode, theme);
+        this._switchToSingleMode(document, lineNumber);
     }
 
     private _handleThemeChange(theme: string) {
-        // Just update the preview, don't save to settings
-        this._update(theme);
+        // Persist the selection and update the preview
+        const config = vscode.workspace.getConfiguration('mermaidPreview');
+        config.update('useVSCodeTheme', false, vscode.ConfigurationTarget.Global);
+        config.update('theme', theme, vscode.ConfigurationTarget.Global);
+        this._render(theme);
     }
 
     private _saveThemePreference(theme: string) {
         // Save to workspace or global settings
         const config = vscode.workspace.getConfiguration('mermaidPreview');
         config.update('theme', theme, vscode.ConfigurationTarget.Global);
+    }
+
+    private async _handleAppearanceChange(appearance: PreviewAppearance) {
+        const config = vscode.workspace.getConfiguration('mermaidPreview');
+        await config.update('previewAppearance', appearance, vscode.ConfigurationTarget.Global);
+        this.refreshAppearance();
     }
 
     private async _handleExportDiagram(data: string, format: string, index: number) {
@@ -204,7 +235,7 @@ export class MermaidPreviewPanel {
         }
     }
 
-    private _update(overrideTheme?: string) {
+    private _renderAll(overrideTheme?: string) {
         const webview = this._panel.webview;
 
         if (!this._currentDocument) {
@@ -221,20 +252,27 @@ export class MermaidPreviewPanel {
             return;
         }
 
-        // Get theme from config or override
-        const config = vscode.workspace.getConfiguration('mermaidPreview');
-        const useVSCodeTheme = config.get<boolean>('useVSCodeTheme', false);
-        const configuredTheme = config.get<string>('theme', 'default');
+        const { theme, appearance } = this._resolveTheme(overrideTheme);
+        webview.html = this._getHtmlForWebview(webview, mermaidCode, theme, appearance);
+    }
 
-        let theme = overrideTheme || configuredTheme;
+    private _renderSingle(lineNumber: number, overrideTheme?: string) {
+        const webview = this._panel.webview;
 
-        // If useVSCodeTheme is enabled, determine theme based on VSCode theme
-        if (useVSCodeTheme && !overrideTheme) {
-            const colorTheme = vscode.window.activeColorTheme;
-            theme = colorTheme.kind === vscode.ColorThemeKind.Dark ? 'dark' : 'default';
+        if (!this._currentDocument) {
+            webview.html = this._getErrorHtml('No document to preview');
+            return;
         }
 
-        webview.html = this._getHtmlForWebview(webview, mermaidCode, theme);
+        const mermaidCode = this._extractMermaidCodeAtLine(this._currentDocument, lineNumber);
+
+        if (!mermaidCode) {
+            webview.html = this._getErrorHtml('No Mermaid diagram found at this position.');
+            return;
+        }
+
+        const { theme, appearance } = this._resolveTheme(overrideTheme);
+        webview.html = this._getHtmlForWebview(webview, mermaidCode, theme, appearance);
     }
 
     private _extractMermaidCode(document: vscode.TextDocument): string | null {
@@ -306,20 +344,52 @@ export class MermaidPreviewPanel {
         return null;
     }
 
+    private _resolveTheme(overrideTheme?: string): { theme: string; appearance: PreviewAppearance } {
+        const config = vscode.workspace.getConfiguration('mermaidPreview');
+        const useVSCodeTheme = config.get<boolean>('useVSCodeTheme', false);
+        const configuredTheme = config.get<string>('theme', 'default');
+        const appearance = config.get<PreviewAppearance>('previewAppearance', 'matchVSCode');
+
+        let theme = overrideTheme || configuredTheme;
+
+        if (useVSCodeTheme && !overrideTheme) {
+            if (appearance === 'light') {
+                theme = 'default';
+            } else if (appearance === 'dark') {
+                theme = 'dark';
+            } else {
+                const colorTheme = vscode.window.activeColorTheme;
+                theme = colorTheme.kind === vscode.ColorThemeKind.Dark ? 'dark' : 'default';
+            }
+        }
+
+        return { theme, appearance };
+    }
+
+    private _getAppearanceClass(appearance: PreviewAppearance): string {
+        switch (appearance) {
+            case 'light':
+                return 'appearance-light';
+            case 'dark':
+                return 'appearance-dark';
+            default:
+                return 'appearance-match';
+        }
+    }
+
     private _getHtmlForWebview(
         webview: vscode.Webview,
         mermaidCode: string,
-        theme: string
+        theme: string,
+        appearance: PreviewAppearance
     ): string {
-        // mermaidCode is now a JSON string array of diagrams
         const diagrams = JSON.parse(mermaidCode);
-
-        // Escape each diagram for safe embedding
         const escapedDiagrams = diagrams.map((code: string) =>
             code.replace(/\\/g, '\\\\')
                 .replace(/`/g, '\\`')
                 .replace(/\$/g, '\\$')
         );
+        const appearanceClass = this._getAppearanceClass(appearance);
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -331,42 +401,64 @@ export class MermaidPreviewPanel {
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 
         const vscode = acquireVsCodeApi();
-        let currentZoom = 1.0;
         const diagrams = ${JSON.stringify(escapedDiagrams)};
+        let currentZoom = 1.0;
+        let panX = 0;
+        let panY = 0;
+        let isPanning = false;
+        let lastPanX = 0;
+        let lastPanY = 0;
+        let panInitialized = false;
+        let activeDiagramIndex = 0;
+        let currentTheme = '${theme}';
+        let currentAppearance = '${appearance}';
+        let stageEl = null;
+        let pendingTransform = null;
+        let pendingZoomUpdate = null;
+        const THEME_LABELS = {
+            default: 'Default',
+            dark: 'Dark',
+            forest: 'Forest',
+            neutral: 'Neutral',
+            base: 'Base'
+        };
+        const APPEARANCE_LABELS = {
+            matchVSCode: 'Match VS Code',
+            light: 'Light',
+            dark: 'Dark'
+        };
 
         mermaid.initialize({
             startOnLoad: false,
-            theme: '${theme}',
+            theme: currentTheme,
             securityLevel: 'loose',
             flowchart: { useMaxWidth: true, htmlLabels: true }
         });
+
+        function initializePanAndZoom() {
+            if (panInitialized) {
+                return;
+            }
+            panInitialized = true;
+            const viewport = document.getElementById('diagram-viewport');
+            viewport.addEventListener('pointerdown', startPan);
+            viewport.addEventListener('pointermove', panMove);
+            viewport.addEventListener('pointerup', endPan);
+            viewport.addEventListener('pointerleave', endPan);
+            viewport.addEventListener('pointercancel', endPan);
+            viewport.addEventListener('wheel', handleWheel, { passive: false });
+        }
 
         async function renderAllDiagrams() {
             const container = document.getElementById('diagrams-container');
             container.innerHTML = '';
 
             for (let i = 0; i < diagrams.length; i++) {
-                const diagramWrapper = document.createElement('div');
-                diagramWrapper.className = 'diagram-wrapper';
-                diagramWrapper.innerHTML = \`
-                    <div class="diagram-header">
-                        <span class="diagram-title">Diagram \${i + 1} of \${diagrams.length}</span>
-                        <div class="diagram-actions">
-                            <div class="export-dropdown">
-                                <button class="action-btn export-btn" onclick="toggleExportMenu(\${i})">
-                                    Export ▾
-                                </button>
-                                <div class="export-menu" id="export-menu-\${i}">
-                                    <button onclick="exportDiagram(\${i}, 'svg'); closeExportMenu(\${i})">SVG</button>
-                                    <button onclick="exportDiagram(\${i}, 'png'); closeExportMenu(\${i})">PNG</button>
-                                    <button onclick="exportDiagram(\${i}, 'jpg'); closeExportMenu(\${i})">JPG</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="diagram-content" id="diagram-\${i}">Loading...</div>
-                \`;
-                container.appendChild(diagramWrapper);
+                const shell = document.createElement('div');
+                shell.className = 'diagram-shell';
+                shell.dataset.index = i.toString();
+                shell.innerHTML = '<div class="diagram-content" id="diagram-' + i + '">Loading...</div>';
+                container.appendChild(shell);
 
                 try {
                     const { svg } = await mermaid.render('mermaid-' + i + '-' + Date.now(), diagrams[i]);
@@ -375,34 +467,225 @@ export class MermaidPreviewPanel {
                     document.getElementById('diagram-' + i).innerHTML =
                         '<div class="error">Error: ' + error.message + '</div>';
                 }
+
+                shell.addEventListener('click', () => focusDiagram(i));
             }
 
-            applyZoom();
+            scheduleTransform();
+            setActiveDiagram(activeDiagramIndex);
+            updateDiagramIndicator();
+            initializePanAndZoom();
         }
 
-        function applyZoom() {
+        function scheduleTransform() {
+            if (pendingTransform) {
+                return;
+            }
+            pendingTransform = requestAnimationFrame(applyTransform);
+        }
+
+        function scheduleZoomUpdate() {
+            if (pendingZoomUpdate) {
+                return;
+            }
+            pendingZoomUpdate = requestAnimationFrame(applyZoomScale);
+        }
+
+        function applyTransform() {
+            pendingTransform = null;
+            if (!stageEl) {
+                return;
+            }
+            const roundedPanX = Math.round(panX);
+            const roundedPanY = Math.round(panY);
+            stageEl.style.transform = 'translate(' + roundedPanX + 'px, ' + roundedPanY + 'px)';
+        }
+
+        function applyZoomScale() {
+            pendingZoomUpdate = null;
             document.querySelectorAll('.diagram-content').forEach(el => {
-                el.style.transform = \`scale(\${currentZoom})\`;
+                el.style.transform = 'scale(' + currentZoom + ')';
             });
             document.getElementById('zoom-level').textContent = Math.round(currentZoom * 100) + '%';
         }
 
         window.zoomIn = function() {
-            currentZoom = Math.min(currentZoom + 0.1, 3.0);
-            applyZoom();
+            currentZoom = Math.min(currentZoom + 0.1, 5.0);
+            scheduleZoomUpdate();
         };
 
         window.zoomOut = function() {
-            currentZoom = Math.max(currentZoom - 0.1, 0.3);
-            applyZoom();
+            currentZoom = Math.max(currentZoom - 0.1, 0.5);
+            scheduleZoomUpdate();
         };
 
         window.zoomReset = function() {
             currentZoom = 1.0;
-            applyZoom();
+            panX = 0;
+            panY = 0;
+            scheduleTransform();
+            scheduleZoomUpdate();
         };
 
+        function startPan(event) {
+            if (event.target.closest('.dropdown')) {
+                return;
+            }
+            isPanning = true;
+            lastPanX = event.clientX;
+            lastPanY = event.clientY;
+            event.target.setPointerCapture(event.pointerId);
+            document.body.classList.add('is-panning');
+        }
+
+        function panMove(event) {
+            if (!isPanning) {
+                return;
+            }
+            event.preventDefault();
+            const dx = event.clientX - lastPanX;
+            const dy = event.clientY - lastPanY;
+            lastPanX = event.clientX;
+            lastPanY = event.clientY;
+            panX += dx / currentZoom;
+            panY += dy / currentZoom;
+            scheduleTransform();
+        }
+
+        function endPan(event) {
+            if (!isPanning) {
+                return;
+            }
+            isPanning = false;
+            try {
+                event.target.releasePointerCapture(event.pointerId);
+            } catch (err) {
+                // ignore
+            }
+            document.body.classList.remove('is-panning');
+        }
+
+        function handleWheel(event) {
+            if (!event.ctrlKey) {
+                return;
+            }
+            event.preventDefault();
+            if (event.deltaY < 0) {
+                zoomIn();
+            } else {
+                zoomOut();
+            }
+        }
+
+        function updateDiagramIndicator() {
+            const indicator = document.getElementById('diagram-indicator');
+            const controls = document.getElementById('diagram-controls');
+            if (!indicator || !controls) {
+                return;
+            }
+            const hasMultiple = diagrams.length > 1;
+            indicator.textContent = hasMultiple
+                ? 'Diagram ' + (activeDiagramIndex + 1) + ' of ' + diagrams.length
+                : '';
+            controls.style.display = hasMultiple ? 'flex' : 'none';
+        }
+
+        function setActiveDiagram(index) {
+            if (!diagrams.length) {
+                return;
+            }
+            activeDiagramIndex = Math.max(0, Math.min(diagrams.length - 1, index));
+            document.querySelectorAll('.diagram-shell').forEach((shell, idx) => {
+                shell.classList.toggle('active', idx === activeDiagramIndex);
+            });
+            updateDiagramIndicator();
+        }
+
+        function focusDiagram(index) {
+            setActiveDiagram(index);
+            const target = document.getElementById('diagram-' + index);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        window.navigateDiagram = function(delta) {
+            if (!diagrams.length) {
+                return;
+            }
+            const next = (activeDiagramIndex + delta + diagrams.length) % diagrams.length;
+            focusDiagram(next);
+        };
+
+        function getAppearanceClass(appearance) {
+            if (appearance === 'light') {
+                return 'appearance-light';
+            }
+            if (appearance === 'dark') {
+                return 'appearance-dark';
+            }
+            return 'appearance-match';
+        }
+
+        function setBodyAppearance(appearance) {
+            const classList = document.body.classList;
+            classList.remove('appearance-light', 'appearance-dark', 'appearance-match');
+            classList.add(getAppearanceClass(appearance));
+            currentAppearance = appearance;
+            updateDropdownSelection('dropdown-appearance', appearance);
+            updateAppearanceButtonLabel(appearance);
+        }
+
+        function updateDropdownSelection(menuId, value) {
+            document.querySelectorAll('#' + menuId + ' button').forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.value === value);
+            });
+        }
+
+        function updateThemeButtonLabel(theme) {
+            const button = document.getElementById('theme-button');
+            if (button) {
+                const label = THEME_LABELS[theme] || 'Custom';
+                button.textContent = 'Theme: ' + label + ' ▾';
+            }
+        }
+
+        function updateAppearanceButtonLabel(appearance) {
+            const button = document.getElementById('appearance-button');
+            if (button) {
+                const label = APPEARANCE_LABELS[appearance] || 'Custom';
+                button.textContent = 'Appearance: ' + label + ' ▾';
+            }
+        }
+
+        function closeAllDropdowns(exceptId) {
+            document.querySelectorAll('.dropdown-menu').forEach(menu => {
+                if (menu.id === exceptId) {
+                    return;
+                }
+                menu.classList.remove('show');
+            });
+        }
+
+        window.toggleDropdown = function(name) {
+            const menu = document.getElementById('dropdown-' + name);
+            const isOpen = menu.classList.contains('show');
+            closeAllDropdowns(isOpen ? undefined : menu.id);
+            if (!isOpen) {
+                menu.classList.add('show');
+            }
+        };
+
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.dropdown')) {
+                closeAllDropdowns();
+            }
+        });
+
         window.handleThemeChange = function(newTheme) {
+            currentTheme = newTheme;
+            updateDropdownSelection('dropdown-theme', newTheme);
+            updateThemeButtonLabel(newTheme);
             mermaid.initialize({
                 startOnLoad: false,
                 theme: newTheme,
@@ -410,6 +693,18 @@ export class MermaidPreviewPanel {
                 flowchart: { useMaxWidth: true, htmlLabels: true }
             });
             renderAllDiagrams();
+            vscode.postMessage({
+                command: 'changeTheme',
+                theme: newTheme
+            });
+        };
+
+        window.handleAppearanceChange = function(newAppearance) {
+            setBodyAppearance(newAppearance);
+            vscode.postMessage({
+                command: 'changeAppearance',
+                appearance: newAppearance
+            });
         };
 
         function getSvgDimensions(svgEl) {
@@ -488,7 +783,7 @@ export class MermaidPreviewPanel {
 
             const svgData = new XMLSerializer().serializeToString(clonedSvg);
             const encodedSvg = encodeURIComponent(svgData);
-            const imgSrc = \`data:image/svg+xml;charset=utf-8,\${encodedSvg}\`;
+            const imgSrc = 'data:image/svg+xml;charset=utf-8,' + encodedSvg;
 
             const img = await loadImage(imgSrc);
             const canvas = document.createElement('canvas');
@@ -522,24 +817,24 @@ export class MermaidPreviewPanel {
             });
         }
 
-        window.exportDiagram = async function(index, format) {
+        window.exportActiveDiagram = async function(format) {
+            exportDiagram(activeDiagramIndex, format);
+        };
+
+        async function exportDiagram(index, format) {
             const diagramEl = document.getElementById('diagram-' + index);
-            const svgEl = diagramEl.querySelector('svg');
+            const svgEl = diagramEl?.querySelector('svg');
             if (!svgEl) {
                 console.error('SVG element not found');
                 return;
             }
 
             try {
-                // Clone the SVG to avoid modifying the original
                 const clonedSvg = svgEl.cloneNode(true);
 
                 if (format === 'svg') {
-                    // SVG export
                     const svgData = new XMLSerializer().serializeToString(clonedSvg);
                     const base64Data = btoa(unescape(encodeURIComponent(svgData)));
-
-                    console.log('Sending SVG export message to extension');
                     vscode.postMessage({
                         command: 'exportDiagram',
                         format: 'svg',
@@ -548,7 +843,6 @@ export class MermaidPreviewPanel {
                     });
                 } else {
                     try {
-                        console.log('Rasterizing SVG for', format, 'export');
                         const base64Data = await rasterizeSvg(svgEl, format);
                         vscode.postMessage({
                             command: 'exportDiagram',
@@ -557,46 +851,24 @@ export class MermaidPreviewPanel {
                             index: index
                         });
                     } catch (rasterError) {
-                        console.error('Rasterization failed:', rasterError);
                         notifyExportError(rasterError instanceof Error ? rasterError.message : String(rasterError), format);
                     }
                 }
             } catch (error) {
-                console.error('Export failed:', error);
                 notifyExportError(error instanceof Error ? error.message : String(error), format);
             }
-        };
+        }
 
-        window.toggleExportMenu = function(index) {
-            const menu = document.getElementById('export-menu-' + index);
-            const allMenus = document.querySelectorAll('.export-menu');
-
-            // Close all other menus
-            allMenus.forEach(m => {
-                if (m !== menu) {
-                    m.classList.remove('show');
-                }
-            });
-
-            // Toggle current menu
-            menu.classList.toggle('show');
-        };
-
-        window.closeExportMenu = function(index) {
-            const menu = document.getElementById('export-menu-' + index);
-            menu.classList.remove('show');
-        };
-
-        // Close dropdown when clicking outside
-        document.addEventListener('click', function(event) {
-            if (!event.target.closest('.export-dropdown')) {
-                document.querySelectorAll('.export-menu').forEach(menu => {
-                    menu.classList.remove('show');
-                });
-            }
+        window.addEventListener('load', () => {
+            stageEl = document.getElementById('diagram-stage');
+            setBodyAppearance(currentAppearance);
+            updateDropdownSelection('dropdown-theme', currentTheme);
+            updateDropdownSelection('dropdown-appearance', currentAppearance);
+            updateThemeButtonLabel(currentTheme);
+            renderAllDiagrams();
+            scheduleZoomUpdate();
+            scheduleTransform();
         });
-
-        window.addEventListener('load', renderAllDiagrams);
     </script>
     <style>
         * { box-sizing: border-box; }
@@ -606,19 +878,66 @@ export class MermaidPreviewPanel {
             background-color: var(--vscode-editor-background);
             color: var(--vscode-editor-foreground);
             font-family: var(--vscode-font-family);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        body.appearance-match {
+            /* VS Code theme defaults */
+        }
+
+        body.appearance-light {
+            --vscode-editor-background: #ffffff;
+            --vscode-editor-foreground: #1f1f1f;
+            --vscode-editorWidget-background: #f3f3f3;
+            --vscode-editorWidget-border: #dcdcdc;
+            --vscode-editorGroupHeader-tabsBackground: #f8f8f8;
+            --vscode-button-background: #0067c0;
+            --vscode-button-foreground: #ffffff;
+            --vscode-button-hoverBackground: #0058a6;
+            --vscode-menu-background: #ffffff;
+            --vscode-menu-border: #dcdcdc;
+            --vscode-menu-foreground: #1f1f1f;
+            --vscode-menu-selectionBackground: #e6f2ff;
+            --vscode-menu-selectionForeground: #1f1f1f;
+            --vscode-errorForeground: #a1260d;
+            --vscode-inputValidation-errorBackground: #f8d7da;
+            --vscode-inputValidation-errorBorder: #f5c6cb;
+        }
+
+        body.appearance-dark {
+            --vscode-editor-background: #1e1e1e;
+            --vscode-editor-foreground: #f3f3f3;
+            --vscode-editorWidget-background: #252526;
+            --vscode-editorWidget-border: #3c3c3c;
+            --vscode-editorGroupHeader-tabsBackground: #2c2c2c;
+            --vscode-button-background: #0e639c;
+            --vscode-button-foreground: #ffffff;
+            --vscode-button-hoverBackground: #1177bb;
+            --vscode-menu-background: #252526;
+            --vscode-menu-border: #3c3c3c;
+            --vscode-menu-foreground: #f3f3f3;
+            --vscode-menu-selectionBackground: #094771;
+            --vscode-menu-selectionForeground: #ffffff;
+            --vscode-errorForeground: #f48771;
+            --vscode-inputValidation-errorBackground: #5a1d1d;
+            --vscode-inputValidation-errorBorder: #be1100;
+        }
+
+        body.is-panning {
+            cursor: grabbing;
         }
 
         .toolbar {
-            position: sticky;
-            top: 0;
             background-color: var(--vscode-editorWidget-background);
             border-bottom: 1px solid var(--vscode-editorWidget-border);
-            padding: 12px 16px;
+            padding: 10px 16px;
             display: flex;
             align-items: center;
             gap: 12px;
-            z-index: 1000;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            z-index: 2;
         }
 
         .toolbar-group {
@@ -629,21 +948,28 @@ export class MermaidPreviewPanel {
             border-right: 1px solid var(--vscode-editorWidget-border);
         }
 
-        .toolbar-group:last-child { border-right: none; }
+        .toolbar-group:last-child {
+            border-right: none;
+        }
 
-        .toolbar button, .action-btn {
+        .toolbar button {
             background-color: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border: none;
             padding: 6px 12px;
-            border-radius: 3px;
+            border-radius: 4px;
             font-size: 12px;
             cursor: pointer;
             font-family: var(--vscode-font-family);
         }
 
-        .toolbar button:hover, .action-btn:hover {
+        .toolbar button:hover {
             background-color: var(--vscode-button-hoverBackground);
+        }
+
+        .toolbar button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         #zoom-level {
@@ -653,95 +979,107 @@ export class MermaidPreviewPanel {
             font-weight: 600;
         }
 
-        #diagrams-container {
-            padding: 20px;
-        }
-
-        .diagram-wrapper {
+        #diagram-viewport {
+            flex: 1;
+            overflow: auto;
             background-color: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-editorWidget-border);
-            border-radius: 6px;
-            margin-bottom: 24px;
-            overflow: hidden;
         }
 
-        .diagram-header {
-            background-color: var(--vscode-editorGroupHeader-tabsBackground);
-            padding: 10px 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--vscode-editorWidget-border);
-        }
-
-        .diagram-title {
-            font-weight: 600;
-            font-size: 13px;
-        }
-
-        .diagram-actions {
-            display: flex;
-            gap: 6px;
-        }
-
-        .export-dropdown {
-            position: relative;
-            display: inline-block;
-        }
-
-        .export-btn {
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-
-        .export-menu {
-            display: none;
-            position: absolute;
-            right: 0;
-            top: 100%;
-            margin-top: 4px;
-            background-color: var(--vscode-menu-background);
-            border: 1px solid var(--vscode-menu-border);
-            border-radius: 3px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: 1000;
-            min-width: 100px;
-        }
-
-        .export-menu.show {
-            display: block;
-        }
-
-        .export-menu button {
+        #diagram-stage {
             width: 100%;
-            text-align: left;
-            padding: 8px 16px;
-            background: transparent;
-            color: var(--vscode-menu-foreground);
-            border: none;
-            cursor: pointer;
-            font-size: 12px;
-            font-family: var(--vscode-font-family);
+            min-height: 100%;
+            transform-origin: center center;
+            will-change: transform;
         }
 
-        .export-menu button:hover {
-            background-color: var(--vscode-menu-selectionBackground);
-            color: var(--vscode-menu-selectionForeground);
+        #diagrams-container {
+            padding: 32px 48px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        .diagram-shell {
+            padding: 0;
+        }
+
+        .diagram-shell.active {
+            box-shadow: none;
+            background-color: transparent;
         }
 
         .diagram-content {
-            padding: 20px;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 200px;
-            transform-origin: top center;
-            transition: transform 0.2s ease;
+            transform-origin: top left;
+            transition: transform 0.1s ease-out;
+            cursor: grab;
         }
 
         .diagram-content svg {
-            max-width: 100%;
+            width: 100%;
             height: auto;
+        }
+
+        body.is-panning .diagram-content {
+            cursor: grabbing;
+        }
+
+        .dropdown {
+            position: relative;
+        }
+
+        .action-btn {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 0;
+            min-width: 140px;
+            background-color: var(--vscode-menu-background);
+            border: 1px solid var(--vscode-menu-border);
+            border-radius: 4px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+            z-index: 10;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-menu button {
+            width: 100%;
+            padding: 8px 14px;
+            background: transparent;
+            color: var(--vscode-menu-foreground);
+            border: none;
+            text-align: left;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .dropdown-menu button:hover,
+        .dropdown-menu button.selected {
+            background-color: var(--vscode-menu-selectionBackground);
+            color: var(--vscode-menu-selectionForeground);
+        }
+
+        .diagram-indicator {
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 140px;
+            text-align: center;
         }
 
         .error {
@@ -753,7 +1091,7 @@ export class MermaidPreviewPanel {
         }
     </style>
 </head>
-<body>
+<body class="${appearanceClass}">
     <div class="toolbar">
         <div class="toolbar-group">
             <button onclick="zoomOut()">−</button>
@@ -761,22 +1099,46 @@ export class MermaidPreviewPanel {
             <button onclick="zoomIn()">+</button>
             <button onclick="zoomReset()">Reset</button>
         </div>
-        <div class="toolbar-group">
-            <label for="theme-select">Theme:</label>
-            <select id="theme-select" onchange="handleThemeChange(this.value)">
-                <option value="default" ${theme === 'default' ? 'selected' : ''}>Default</option>
-                <option value="dark" ${theme === 'dark' ? 'selected' : ''}>Dark</option>
-                <option value="forest" ${theme === 'forest' ? 'selected' : ''}>Forest</option>
-                <option value="neutral" ${theme === 'neutral' ? 'selected' : ''}>Neutral</option>
-                <option value="base" ${theme === 'base' ? 'selected' : ''}>Base</option>
-            </select>
+        <div class="toolbar-group" id="diagram-controls">
+            <button id="prev-diagram" onclick="navigateDiagram(-1)">◀</button>
+            <span id="diagram-indicator"></span>
+            <button id="next-diagram" onclick="navigateDiagram(1)">▶</button>
+        </div>
+        <div class="toolbar-group dropdown">
+            <button class="action-btn" id="theme-button" onclick="toggleDropdown('theme')">Theme ▾</button>
+            <div class="dropdown-menu" id="dropdown-theme">
+                <button data-value="default" onclick="handleThemeChange('default')">Default</button>
+                <button data-value="dark" onclick="handleThemeChange('dark')">Dark</button>
+                <button data-value="forest" onclick="handleThemeChange('forest')">Forest</button>
+                <button data-value="neutral" onclick="handleThemeChange('neutral')">Neutral</button>
+                <button data-value="base" onclick="handleThemeChange('base')">Base</button>
+            </div>
+        </div>
+        <div class="toolbar-group dropdown">
+            <button class="action-btn" id="appearance-button" onclick="toggleDropdown('appearance')">Appearance ▾</button>
+            <div class="dropdown-menu" id="dropdown-appearance">
+                <button data-value="matchVSCode" onclick="handleAppearanceChange('matchVSCode')">Match VS Code</button>
+                <button data-value="light" onclick="handleAppearanceChange('light')">Light</button>
+                <button data-value="dark" onclick="handleAppearanceChange('dark')">Dark</button>
+            </div>
+        </div>
+        <div class="toolbar-group dropdown">
+            <button class="action-btn" onclick="toggleDropdown('export')">Export ▾</button>
+            <div class="dropdown-menu" id="dropdown-export">
+                <button onclick="exportActiveDiagram('svg')">SVG</button>
+                <button onclick="exportActiveDiagram('png')">PNG</button>
+                <button onclick="exportActiveDiagram('jpg')">JPG</button>
+            </div>
         </div>
     </div>
-    <div id="diagrams-container"></div>
+    <div id="diagram-viewport">
+        <div id="diagram-stage">
+            <div id="diagrams-container"></div>
+        </div>
+    </div>
 </body>
 </html>`;
     }
-
     private _getErrorHtml(message: string): string {
         return `<!DOCTYPE html>
 <html lang="en">
@@ -816,6 +1178,14 @@ export class MermaidPreviewPanel {
     </div>
 </body>
 </html>`;
+    }
+
+    public refreshAppearance() {
+        if (!this._currentDocument) {
+            return;
+        }
+
+        this._render();
     }
 
     public dispose() {

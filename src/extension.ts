@@ -31,6 +31,19 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(logger);
     logger.logInfo('Mermaid Preview extension activated');
 
+    // Refresh preview when VS Code theme changes so appearance rules can be re-applied
+    const themeChangeListener = vscode.window.onDidChangeActiveColorTheme(() => {
+        MermaidPreviewPanel.currentPanel?.refreshAppearance();
+    });
+    context.subscriptions.push(themeChangeListener);
+
+    const configChangeListener = vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration('mermaidPreview.previewAppearance')) {
+            MermaidPreviewPanel.currentPanel?.refreshAppearance();
+        }
+    });
+    context.subscriptions.push(configChangeListener);
+
     // Register CodeLens provider
     const codeLensProvider = new MermaidCodeLensProvider();
     context.subscriptions.push(
