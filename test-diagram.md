@@ -1,4 +1,4 @@
-# Mermaid Preview Test File
+# Mermaid Lens Test File
 
 Test the extension with these sample diagrams!
 
@@ -16,7 +16,7 @@ erDiagram
     CUSTOMER ||--o{ ORDER : places
     ORDER ||--|{ LINE-ITEM : contains
     CUSTOMER {
-        string name
+        string name1
         string email
         int id
     }

@@ -1,6 +1,6 @@
-# Mermaid Preview with Themes
+# Mermaid Lens
 
-A VSCode extension that provides a rich preview experience for Mermaid diagrams with independent theme selection, not tied to your VSCode theme. It keeps everything local-no accounts, Copilot prompts, or remote services-while giving you a dedicated preview surface with toolbar controls, per-diagram commands, and quick SVG/PNG/JPG exports instead of relying on the built-in Markdown preview.
+A VSCode extension that gives you a focused lens into Mermaid diagrams with independent theme selection, appearance overrides, and export controls. Everything stays local-no accounts, Copilot prompts, or external services-while the dedicated preview surface (plus CodeLens buttons and gutter highlights) keeps multi- and single-diagram workflows fast.
 
 ## Features
 
@@ -9,11 +9,15 @@ A VSCode extension that provides a rich preview experience for Mermaid diagrams 
 - **Live Preview**: Automatic preview updates as you edit your Mermaid diagrams
 - **Rich Preview Toolbar**: Zoom, pan, reset, navigate between diagrams, and change the preview chrome (match VS Code, light, or dark) without leaving the panel
 - **Export Options**: Save any diagram as SVG, PNG, or JPG right from the preview toolbar
-- **Per-Diagram Commands**: Use the gutter icon or CodeLens above each \`\`\`mermaid block to open a focused preview beside the editor
+- **On-Document Shortcuts**: Click the CodeLens button or gutter icon on each mermaid fenced block to open the preview (to the side) without leaving the editor
 - **Side-by-Side View**: Open preview beside your editor for convenient editing
 - **Theme Persistence**: Save your preferred theme as default
 - **Multi-Diagram Support**: Preview every Mermaid block in a document and jump between them with the toolbar navigation controls
 - **Offline Friendly**: Bundles Mermaid 11.12.2 locally, so previews work without a network connection or account
+
+## Demo
+
+![Demo](images/demo.gif)
 
 ## Usage
 
@@ -22,9 +26,9 @@ A VSCode extension that provides a rich preview experience for Mermaid diagrams 
 1. Open a Markdown file containing Mermaid diagrams
 2. Use one of these methods:
    - Click the preview icon in the editor title bar
-   - Right-click in the editor and select "Mermaid: Open Preview"
-   - Use Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and search for "Mermaid: Open Preview"
-   - For side-by-side view: "Mermaid: Open Preview to the Side"
+   - Right-click in the editor and select "Mermaid Lens: Open Preview"
+   - Use Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and search for "Mermaid Lens: Open Preview"
+   - For side-by-side view: "Mermaid Lens: Open Preview to the Side"
 
 ### Changing Themes
 
@@ -35,9 +39,11 @@ In the preview panel toolbar:
 
 ### Previewing Individual Diagrams
 
-- A **CodeLens button** labeled *Preview Diagram* appears above every ```mermaid block-click it to open a focused preview beside the editor.
-- A subtle **gutter icon** highlights each Mermaid fence so you can spot diagrams at a glance and trigger the same side-by-side preview from the icon.
-- Both entry points respect your theme/appearance preferences and keep the preview in sync as you edit.
+- A **CodeLens button** labeled *Preview Diagram* appears above every mermaid fenced block; clicking it opens a new panel focused solely on that diagram.
+- A subtle **gutter icon** highlights each Mermaid fence, so you can trigger the same single-diagram preview without scrolling back to the CodeLens.
+- The editor toolbar/title icon still opens the multi-diagram preview, so you can see every Mermaid block at once.
+
+![CodeLens and Gutter Icon](images/icons-showcase.png)
 
 ### Supported Themes
 
@@ -54,31 +60,31 @@ Configure the extension through VSCode settings:
 ```json
 {
   // Default theme for Mermaid diagrams
-  "mermaidPreview.theme": "default",
+  "mermaidLens.theme": "default",
 
   // Automatically sync Mermaid theme with VSCode theme
-  "mermaidPreview.useVSCodeTheme": false,
+  "mermaidLens.useVSCodeTheme": false,
 
   // Automatically refresh preview on document changes
-  "mermaidPreview.autoRefresh": true,
+  "mermaidLens.autoRefresh": true,
 
   // Delay in milliseconds before refreshing preview after changes
-  "mermaidPreview.refreshDelay": 500
+  "mermaidLens.refreshDelay": 500
 }
 ```
 
 ## Example Mermaid Diagram
 
-```markdown
-\`\`\`mermaid
+````
+```mermaid
 graph TD
     A[Start] --> B{Is it working?}
-    B -->|Yes| C[Great!]
-    B -->|No| D[Debug]
+    B -->|Yes| C[Awesome!]
+    B -->|No| D[Debug it]
     D --> B
-\`\`\`
+    C --> E[End]
 ```
-
+````
 ## Commands
 
 - `Mermaid: Open Preview` - Opens preview in current column
@@ -91,16 +97,16 @@ graph TD
 
 ## Known Limitations
 
-- Only previews Mermaid diagrams within \`\`\`mermaid code blocks
+- Only previews Mermaid diagrams within mermaid fenced code blocks
 
 ## Extension Settings
 
 This extension contributes the following settings:
 
-* `mermaidPreview.theme`: Choose the default Mermaid theme
-* `mermaidPreview.useVSCodeTheme`: Sync theme with VSCode
-* `mermaidPreview.autoRefresh`: Enable/disable auto-refresh
-* `mermaidPreview.refreshDelay`: Set refresh delay in milliseconds
+* `mermaidLens.theme`: Choose the default Mermaid theme
+* `mermaidLens.useVSCodeTheme`: Sync theme with VSCode
+* `mermaidLens.autoRefresh`: Enable/disable auto-refresh
+* `mermaidLens.refreshDelay`: Set refresh delay in milliseconds
 
 ## Release Notes
 
@@ -120,4 +126,4 @@ Found a bug or have a feature request? Please open an issue!
 
 ## License
 
-MIT
+MIT - if you build on Mermaid Lens, please keep the copyright notice intact and include attribution to Utkarsh Shigihalli in your distribution or documentation.

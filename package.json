@@ -1,7 +1,7 @@
 {
-  "name": "better-mermaid-preview",
-  "displayName": "Better Mermaid Preview",
-  "description": "Preview Mermaid diagrams with custom theme selection independent of VSCode theme.",
+  "name": "mermaid-lens",
+  "displayName": "Mermaid Lens",
+  "description": "Lens into your Mermaid diagrams with independent theming, exports, and focused previews.",
   "version": "0.0.1",
   "publisher": "onlyutkarsh",
   "engines": {
@@ -35,7 +35,7 @@
     "commands": [
       {
         "command": "mermaid-preview.showPreview",
-        "title": "Better Mermaid Preview: Open Preview",
+        "title": "Mermaid Lens: Open Preview",
         "icon": {
           "light": "media/mermaid-gutter.svg",
           "dark": "media/mermaid-gutter.svg"
@@ -43,7 +43,7 @@
       },
       {
         "command": "mermaid-preview.showPreviewToSide",
-        "title": "Better Mermaid Preview: Open Preview to the Side",
+        "title": "Mermaid Lens: Open Preview to the Side",
         "icon": {
           "light": "media/mermaid-gutter.svg",
           "dark": "media/mermaid-gutter.svg"
@@ -51,7 +51,7 @@
       },
       {
         "command": "mermaid-preview.showDiagramAtPosition",
-        "title": "Better Mermaid Preview: Preview This Diagram"
+        "title": "Mermaid Lens: Preview Diagram Here"
       }
     ],
     "menus": {
@@ -71,9 +71,9 @@
       ]
     },
     "configuration": {
-      "title": "Mermaid Preview",
+      "title": "Mermaid Lens",
       "properties": {
-        "mermaidPreview.theme": {
+        "mermaidLens.theme": {
           "type": "string",
           "default": "default",
           "enum": [
@@ -92,22 +92,22 @@
           ],
           "description": "Default theme for Mermaid diagrams"
         },
-        "mermaidPreview.useVSCodeTheme": {
+        "mermaidLens.useVSCodeTheme": {
           "type": "boolean",
           "default": false,
           "description": "Automatically sync Mermaid theme with VSCode theme (dark/light)"
         },
-        "mermaidPreview.autoRefresh": {
+        "mermaidLens.autoRefresh": {
           "type": "boolean",
           "default": true,
           "description": "Automatically refresh preview on document changes"
         },
-        "mermaidPreview.refreshDelay": {
+        "mermaidLens.refreshDelay": {
           "type": "number",
           "default": 500,
           "description": "Delay in milliseconds before refreshing preview after changes"
         },
-        "mermaidPreview.previewAppearance": {
+        "mermaidLens.previewAppearance": {
           "type": "string",
           "default": "matchVSCode",
           "enum": [
@@ -137,14 +137,14 @@
     "publish:ovsx": "ovsx publish"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^25.0.1",
     "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "@vscode/vsce": "^2.32.0",
-    "eslint": "^8.0.0",
-    "ovsx": "^0.8.4",
-    "typescript": "^5.3.0"
+    "@typescript-eslint/eslint-plugin": "^8.49.0",
+    "@typescript-eslint/parser": "^8.49.0",
+    "@vscode/vsce": "^3.7.1",
+    "eslint": "^9.39.2",
+    "ovsx": "^0.10.7",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "mermaid": "^11.12.2"

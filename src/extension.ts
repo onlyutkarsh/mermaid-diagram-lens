@@ -36,7 +36,7 @@ class MermaidGutterDecorator implements vscode.Disposable {
     private readonly decorationType: vscode.TextEditorDecorationType;
 
     constructor(private readonly extensionUri: vscode.Uri) {
-        const iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'mermaid-gutter.svg');
+        const iconPath = vscode.Uri.joinPath(extensionUri, 'images', 'mermaid-gutter.svg');
         this.decorationType = vscode.window.createTextEditorDecorationType({
             gutterIconPath: iconPath,
             gutterIconSize: 'contain'
@@ -74,7 +74,7 @@ class MermaidGutterDecorator implements vscode.Disposable {
 export function activate(context: vscode.ExtensionContext) {
     const logger = Logger.instance;
     context.subscriptions.push(logger);
-    logger.logInfo('Mermaid Preview extension activated');
+    logger.logInfo('Mermaid Lens extension activated');
     const gutterDecorator = new MermaidGutterDecorator(context.extensionUri);
     context.subscriptions.push(gutterDecorator);
     gutterDecorator.update(vscode.window.activeTextEditor);
@@ -86,7 +86,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(themeChangeListener);
 
     const configChangeListener = vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('mermaidPreview.previewAppearance')) {
+        if (event.affectsConfiguration('mermaidLens.previewAppearance')) {
             MermaidPreviewPanel.currentPanel?.refreshAppearance();
         }
     });
@@ -117,7 +117,7 @@ export function activate(context: vscode.ExtensionContext) {
                     languageId: editor.document.languageId,
                     uri: editor.document.uri.toString()
                 });
-                vscode.window.showInformationMessage('Mermaid Preview only works with Markdown files.');
+                vscode.window.showInformationMessage('Mermaid Lens only works with Markdown files.');
                 return;
             }
 
@@ -151,7 +151,7 @@ export function activate(context: vscode.ExtensionContext) {
                     languageId: editor.document.languageId,
                     uri: editor.document.uri.toString()
                 });
-                vscode.window.showInformationMessage('Mermaid Preview only works with Markdown files.');
+                vscode.window.showInformationMessage('Mermaid Lens only works with Markdown files.');
                 return;
             }
 
@@ -169,7 +169,6 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    // Register command to show diagram at specific position
     const showDiagramAtPositionCommand = vscode.commands.registerCommand(
         'mermaid-preview.showDiagramAtPosition',
         async (uri: vscode.Uri | undefined, line: number | undefined) => {
@@ -184,26 +183,16 @@ export function activate(context: vscode.ExtensionContext) {
 
                 if (uri) {
                     document = await vscode.workspace.openTextDocument(uri);
-                } else {
-                    const editor = vscode.window.activeTextEditor;
-                    if (!editor) {
-                        logger.logError('showDiagramAtPosition called without a URI and no active editor');
-                        vscode.window.showErrorMessage('Unable to preview diagram: no document context available.');
-                        return;
-                    }
-
-                    document = editor.document;
+                } else if (vscode.window.activeTextEditor) {
+                    document = vscode.window.activeTextEditor.document;
                     if (typeof targetLine !== 'number') {
-                        targetLine = editor.selection.active.line;
-                        logger.logDebug('Command', 'Using active editor selection for diagram preview', {
-                            inferredLine: targetLine
-                        });
+                        targetLine = vscode.window.activeTextEditor.selection.active.line;
                     }
                 }
 
                 if (!document) {
                     logger.logError('showDiagramAtPosition could not resolve a document');
-                    vscode.window.showErrorMessage('Unable to preview diagram: document could not be determined.');
+                    vscode.window.showErrorMessage('Unable to open diagram preview: no document context available.');
                     return;
                 }
 
@@ -212,13 +201,13 @@ export function activate(context: vscode.ExtensionContext) {
                         languageId: document.languageId,
                         uri: document.uri.toString()
                     });
-                    vscode.window.showInformationMessage('Mermaid Preview only works with Markdown files.');
+                    vscode.window.showInformationMessage('Mermaid Lens only works with Markdown files.');
                     return;
                 }
 
                 if (typeof targetLine !== 'number') {
-                    logger.logError('showDiagramAtPosition missing line information even after fallback');
-                    vscode.window.showErrorMessage('Unable to preview diagram: missing line information.');
+                    logger.logError('showDiagramAtPosition missing line information');
+                    vscode.window.showErrorMessage('Unable to open diagram preview: missing line information.');
                     return;
                 }
 
@@ -230,7 +219,7 @@ export function activate(context: vscode.ExtensionContext) {
                 );
             } catch (error) {
                 logger.logError('Failed to open document for showDiagramAtPosition', error instanceof Error ? error : new Error(String(error)));
-                vscode.window.showErrorMessage('Unable to open document for Mermaid preview. See output for details.');
+                vscode.window.showErrorMessage('Unable to open Mermaid diagram preview. See output for details.');
             }
         }
     );
@@ -239,7 +228,7 @@ export function activate(context: vscode.ExtensionContext) {
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument((e) => {
         gutterDecorator.updateForDocument(e.document);
 
-        const config = vscode.workspace.getConfiguration('mermaidPreview');
+        const config = vscode.workspace.getConfiguration('mermaidLens');
         const autoRefresh = config.get<boolean>('autoRefresh', true);
 
         // Only update if it's a markdown file

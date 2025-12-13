@@ -6,3 +6,7 @@ src
 tsconfig.json
 node_modules
 *.vsix
+test-diagram.md
+**/*.js.map
+.github/
+.claude/
