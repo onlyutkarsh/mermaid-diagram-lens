@@ -5,6 +5,9 @@ Test the extension with these sample diagrams!
 ## Flowchart Example
 
 ```mermaid
+
+```
+```mermaid
 ---
 config:
   layout: elk
@@ -16,7 +19,7 @@ erDiagram
     CUSTOMER ||--o{ ORDER : places
     ORDER ||--|{ LINE-ITEM : contains
     CUSTOMER {
-        string name1
+        string name
         string email
         int id
     }

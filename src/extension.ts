@@ -251,13 +251,33 @@ export function activate(context: vscode.ExtensionContext) {
         editors.forEach(editor => gutterDecorator.update(editor));
     });
 
+    const selectionChangeSubscription = vscode.window.onDidChangeTextEditorSelection((event) => {
+        const panel = MermaidPreviewPanel.currentPanel;
+        if (!panel) {
+            return;
+        }
+
+        const editor = event.textEditor;
+        if (editor.document.languageId !== 'markdown') {
+            return;
+        }
+
+        const activeLine = event.selections[0]?.active.line;
+        if (typeof activeLine !== 'number') {
+            return;
+        }
+
+        panel.handleSelectionChange(editor.document, activeLine);
+    });
+
     context.subscriptions.push(
         showPreviewCommand,
         showPreviewToSideCommand,
         showDiagramAtPositionCommand,
         changeDocumentSubscription,
         changeActiveEditorSubscription,
-        visibleEditorsSubscription
+        visibleEditorsSubscription,
+        selectionChangeSubscription
     );
 }
 

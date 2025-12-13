@@ -37,16 +37,16 @@
         "command": "mermaid-preview.showPreview",
         "title": "Mermaid Lens: Open Preview",
         "icon": {
-          "light": "media/mermaid-gutter.svg",
-          "dark": "media/mermaid-gutter.svg"
+          "light": "images/mermaid-gutter.svg",
+          "dark": "images/mermaid-gutter.svg"
         }
       },
       {
         "command": "mermaid-preview.showPreviewToSide",
         "title": "Mermaid Lens: Open Preview to the Side",
         "icon": {
-          "light": "media/mermaid-gutter.svg",
-          "dark": "media/mermaid-gutter.svg"
+          "light": "images/mermaid-gutter.svg",
+          "dark": "images/mermaid-gutter.svg"
         }
       },
       {
