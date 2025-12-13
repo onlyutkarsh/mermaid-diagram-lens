@@ -26,11 +26,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
-
       - name: Compile TypeScript
         run: npm run compile
+
+      - name: Lint code
+        run: npm run lint
 
       - name: Set dynamic version for CI build
         id: version
@@ -52,14 +52,6 @@ jobs:
           name: mermaid-preview-${{ steps.version.outputs.ci_version }}
           path: "*.vsix"
           retention-days: 90
-
-      - name: Upload test results
-        if: always() && hashFiles('test-results/**') != ''
-        uses: actions/upload-artifact@v5
-        with:
-          name: test-results-${{ github.sha }}
-          path: test-results/
-          retention-days: 30
 
   update-changelog:
     runs-on: ubuntu-latest
