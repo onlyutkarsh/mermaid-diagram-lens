@@ -1,6 +1,6 @@
 {
-  "name": "mermaid-lens",
-  "displayName": "Mermaid Lens",
+  "name": "mermaid-diagram-lens",
+  "displayName": "Mermaid Diagram Lens",
   "description": "Lens into your Mermaid diagrams with independent theming, exports, and focused previews.",
   "version": "0.0.1",
   "publisher": "onlyutkarsh",
@@ -35,7 +35,7 @@
     "commands": [
       {
         "command": "mermaid-preview.showPreview",
-        "title": "Mermaid Lens: Open Preview",
+        "title": "Mermaid Diagram Lens: Open Preview",
         "icon": {
           "light": "images/mermaid-gutter.svg",
           "dark": "images/mermaid-gutter.svg"
@@ -43,7 +43,7 @@
       },
       {
         "command": "mermaid-preview.showPreviewToSide",
-        "title": "Mermaid Lens: Open Preview to the Side",
+        "title": "Mermaid Diagram Lens: Open Preview to the Side",
         "icon": {
           "light": "images/mermaid-gutter.svg",
           "dark": "images/mermaid-gutter.svg"
@@ -51,7 +51,7 @@
       },
       {
         "command": "mermaid-preview.showDiagramAtPosition",
-        "title": "Mermaid Lens: Preview Diagram Here"
+        "title": "Mermaid Diagram Lens: Preview Diagram Here"
       }
     ],
     "menus": {
@@ -71,7 +71,7 @@
       ]
     },
     "configuration": {
-      "title": "Mermaid Lens",
+      "title": "Mermaid Diagram Lens",
       "properties": {
         "mermaidLens.theme": {
           "type": "string",
