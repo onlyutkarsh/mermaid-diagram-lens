@@ -12,6 +12,7 @@
 ### Bug Fixes
 
 * remove token configuration from checkout step in release workflow ([f301515](https://github.com/onlyutkarsh/mermaid-preview-extension/commit/f30151550411184da9c8e819d6f66f762e36922c))
+* replace PNG with WEBP format for icons showcase in README ([4173203](https://github.com/onlyutkarsh/mermaid-preview-extension/commit/4173203f1ce2930f0f9e17d22c8466402df777d0))
 * retain zoom state ([2a02312](https://github.com/onlyutkarsh/mermaid-preview-extension/commit/2a02312236f81e70f14fc7440758ba4349088c85))
 * update permissions and token configuration in release workflow ([b3b04de](https://github.com/onlyutkarsh/mermaid-preview-extension/commit/b3b04de20d3b1dd501258fb172e390a277f0018e))
 
