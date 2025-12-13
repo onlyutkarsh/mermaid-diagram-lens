@@ -6,6 +6,15 @@
 
 ### Changes
 
+## [1.0.2](https://github.com/onlyutkarsh/mermaid-preview-extension/compare/v1.0.1...v1.0.2) (2025-12-13)
+
+
+### Bug Fixes
+
+* update .vscodeignore and package files for improved build process and dependencies ([7896cfd](https://github.com/onlyutkarsh/mermaid-preview-extension/commit/7896cfda705b7872b25b0120dd4817866ef60c35))
+
+
+
 ## [1.0.1](https://github.com/onlyutkarsh/mermaid-preview-extension/compare/24527279f9c51decac028c75ae82dcbe5b8c481e...v1.0.1) (2025-12-13)
 
 
