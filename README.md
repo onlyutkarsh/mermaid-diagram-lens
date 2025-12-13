@@ -40,7 +40,7 @@ In the preview panel toolbar:
 ### Previewing Individual Diagrams
 
 - A **CodeLens button** labeled *Preview Diagram* appears above every mermaid fenced block; clicking it opens a new panel focused solely on that diagram.
-- A subtle **gutter icon** highlights each Mermaid fence, so you can trigger the same single-diagram preview without scrolling back to the CodeLens.
+- A subtle **gutter icon** highlights each Mermaid fence, so you can spot diagrams quickly (it's a visual cue only; use the CodeLens to open the preview).
 - The editor toolbar/title icon still opens the multi-diagram preview, so you can see every Mermaid block at once.
 
 ![CodeLens and Gutter Icon](images/icons-showcase.png)
@@ -87,8 +87,9 @@ graph TD
 ````
 ## Commands
 
-- `Mermaid: Open Preview` - Opens preview in current column
-- `Mermaid: Open Preview to the Side` - Opens preview beside editor
+- `Mermaid Lens: Open Preview` – Shows every Mermaid fence from the active Markdown file in the current editor column.
+- `Mermaid Lens: Open Preview to the Side` – Same multi-diagram preview, but always opens in the column beside the editor for live editing.
+- `Mermaid Lens: Preview Diagram Here` – Focuses only the Mermaid block at the current cursor (or the CodeLens/gutter target) and keeps that single-diagram panel in sync while you type.
 
 ## Requirements
 
