@@ -1,4 +1,4 @@
-# Mermaid Lens Test File
+# Mermaid Diagram Lens Test File
 
 Test the extension with these sample diagrams!
 

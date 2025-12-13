@@ -38,7 +38,7 @@ export class MermaidPreviewPanel {
         // Otherwise, create a new panel
         const panel = vscode.window.createWebviewPanel(
             'mermaidPreview',
-            'Mermaid Lens',
+            'Mermaid Diagram Lens',
             viewColumn,
             {
                 enableScripts: true,
@@ -309,7 +309,13 @@ export class MermaidPreviewPanel {
         }
 
         const { theme, appearance } = this._resolveTheme(overrideTheme);
-        webview.html = this._getHtmlForWebview(webview, mermaidCode, theme, appearance);
+        webview.html = this._getHtmlForWebview(
+            webview,
+            mermaidCode,
+            theme,
+            appearance,
+            this._currentDocument?.uri.toString()
+        );
     }
 
     private _renderSingle(lineNumber?: number, precomputedBlocks?: MermaidBlock[], overrideTheme?: string) {
@@ -337,7 +343,13 @@ export class MermaidPreviewPanel {
 
         const mermaidCode = JSON.stringify([targetBlock.code]);
         const { theme, appearance } = this._resolveTheme(overrideTheme);
-        webview.html = this._getHtmlForWebview(webview, mermaidCode, theme, appearance);
+        webview.html = this._getHtmlForWebview(
+            webview,
+            mermaidCode,
+            theme,
+            appearance,
+            this._currentDocument?.uri.toString()
+        );
     }
 
     private _extractMermaidCode(document: vscode.TextDocument): string | null {
@@ -471,7 +483,8 @@ export class MermaidPreviewPanel {
         webview: vscode.Webview,
         mermaidCode: string,
         theme: string,
-        appearance: PreviewAppearance
+        appearance: PreviewAppearance,
+        documentId?: string
     ): string {
         const diagrams = JSON.parse(mermaidCode);
         const escapedDiagrams = diagrams.map((code: string) =>
@@ -490,20 +503,26 @@ export class MermaidPreviewPanel {
             )
         );
 
+        const docId = documentId ?? 'unknown';
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mermaid Lens</title>
+    <title>Mermaid Diagram Lens</title>
     <script type="module">
         import mermaid from '${mermaidScriptUri}';
 
         const vscode = acquireVsCodeApi();
+        const documentId = ${JSON.stringify(docId)};
+        const persistedState = vscode.getState?.() ?? {};
+        let docStates = persistedState.docStates ?? {};
+        const savedState = docStates[documentId] ?? {};
         const diagrams = ${JSON.stringify(escapedDiagrams)};
-        let currentZoom = 1.0;
-        let panX = 0;
-        let panY = 0;
+        let currentZoom = typeof savedState.currentZoom === 'number' ? savedState.currentZoom : 1.0;
+        let panX = typeof savedState.panX === 'number' ? savedState.panX : 0;
+        let panY = typeof savedState.panY === 'number' ? savedState.panY : 0;
         let isPanning = false;
         let lastPanX = 0;
         let lastPanY = 0;
@@ -609,6 +628,11 @@ export class MermaidPreviewPanel {
             }
         };
 
+        function saveInteractionState() {
+            docStates = { ...docStates, [documentId]: { currentZoom, panX, panY } };
+            vscode.setState({ docStates });
+        }
+
         function initializePanAndZoom() {
             if (panInitialized) {
                 return;
@@ -695,11 +719,13 @@ export class MermaidPreviewPanel {
         window.zoomIn = function() {
             currentZoom = Math.min(currentZoom + 0.1, 5.0);
             scheduleZoomUpdate();
+            saveInteractionState();
         };
 
         window.zoomOut = function() {
             currentZoom = Math.max(currentZoom - 0.1, 0.5);
             scheduleZoomUpdate();
+            saveInteractionState();
         };
 
         window.zoomReset = function() {
@@ -708,6 +734,7 @@ export class MermaidPreviewPanel {
             panY = 0;
             scheduleTransform();
             scheduleZoomUpdate();
+            saveInteractionState();
         };
 
         function startPan(event) {
@@ -746,6 +773,7 @@ export class MermaidPreviewPanel {
                 // ignore
             }
             document.body.classList.remove('is-panning');
+            saveInteractionState();
         }
 
         function handleWheel(event) {
@@ -1348,7 +1376,7 @@ export class MermaidPreviewPanel {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mermaid Lens - Error</title>
+    <title>Mermaid Diagram Lens - Error</title>
     <style>
         body {
             padding: 20px;
