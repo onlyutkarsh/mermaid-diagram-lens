@@ -5,9 +5,6 @@ Test the extension with these sample diagrams!
 ## Flowchart Example
 
 ```mermaid
-
-```
-```mermaid
 ---
 config:
   layout: elk
@@ -129,7 +126,7 @@ gantt
 
 ## Instructions
 
-1. Open this file in VSCode
+1. Open this file in VS Code
 2. Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
 3. Type "Mermaid: Open Preview to the Side"
 4. Try changing themes in the preview toolbar!
