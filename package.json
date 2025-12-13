@@ -129,9 +129,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js",
     "package": "vsce package",
     "deploy": "vsce publish",
     "publish:ovsx": "ovsx publish"
