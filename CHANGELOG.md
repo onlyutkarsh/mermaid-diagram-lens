@@ -6,6 +6,16 @@
 
 ### Changes
 
+# [1.1.0](https://github.com/onlyutkarsh/mermaid-preview-extension/compare/v1.0.2...v1.1.0) (2025-12-13)
+
+
+### Bug Fixes
+
+* enhance webview security and error handling in MermaidPreviewPanel and package mermaid properly ([8a822e3](https://github.com/onlyutkarsh/mermaid-preview-extension/commit/8a822e3284ebac9ce32dbe395252c681a596d4a6))
+* improve disposal handling and enhance toolbar control bindings in MermaidPreviewPanel ([935f5c0](https://github.com/onlyutkarsh/mermaid-preview-extension/commit/935f5c05fe434f80d85cf093c426f864c64dd27c))
+
+
+
 ## [1.0.2](https://github.com/onlyutkarsh/mermaid-preview-extension/compare/v1.0.1...v1.0.2) (2025-12-13)
 
 
