@@ -16,9 +16,29 @@ function findMermaidFenceStartLines(document: vscode.TextDocument): number[] {
     return lines;
 }
 
+function getMermaidBlockAtLine(document: vscode.TextDocument, line: number): string | undefined {
+    const text = document.getText();
+    const mermaidRegex = /```mermaid[^\S\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)?```/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = mermaidRegex.exec(text)) !== null) {
+        const startPos = document.positionAt(match.index);
+        const endPos = document.positionAt(match.index + match[0].length);
+
+        if (line >= startPos.line && line <= endPos.line) {
+            const block = match[1] ?? '';
+            return block.trim();
+        }
+    }
+
+    return undefined;
+}
+
 class MermaidCodeLensProvider implements vscode.CodeLensProvider {
     provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-        return findMermaidFenceStartLines(document).map(line => {
+        const lenses: vscode.CodeLens[] = [];
+
+        for (const line of findMermaidFenceStartLines(document)) {
             const position = new vscode.Position(line, 0);
             const range = new vscode.Range(position, position);
             const command: vscode.Command = {
@@ -27,8 +47,17 @@ class MermaidCodeLensProvider implements vscode.CodeLensProvider {
                 arguments: [document.uri, line]
             };
 
-            return new vscode.CodeLens(range, command);
-        });
+            const copyCommand: vscode.Command = {
+                title: 'Copy Mermaid Code',
+                command: 'mermaid-preview.copyDiagramCode',
+                arguments: [document.uri, line]
+            };
+
+            lenses.push(new vscode.CodeLens(range, command));
+            lenses.push(new vscode.CodeLens(range, copyCommand));
+        }
+
+        return lenses;
     }
 }
 
@@ -99,6 +128,71 @@ export function activate(context: vscode.ExtensionContext) {
             { language: 'markdown', scheme: 'file' },
             codeLensProvider
         )
+    );
+
+    const copyDiagramCodeCommand = vscode.commands.registerCommand(
+        'mermaid-preview.copyDiagramCode',
+        async (uri: vscode.Uri | undefined, line: number | undefined) => {
+            logger.logDebug('Command', 'copyDiagramCode invoked', {
+                uri: uri?.toString() ?? 'undefined',
+                line: line ?? 'undefined'
+            });
+
+            try {
+                let document: vscode.TextDocument | undefined;
+                let targetLine = line;
+
+                if (uri) {
+                    document = await vscode.workspace.openTextDocument(uri);
+                } else if (vscode.window.activeTextEditor) {
+                    document = vscode.window.activeTextEditor.document;
+                    if (typeof targetLine !== 'number') {
+                        targetLine = vscode.window.activeTextEditor.selection.active.line;
+                    }
+                }
+
+                if (!document) {
+                    logger.logError('copyDiagramCode could not resolve a document');
+                    vscode.window.showErrorMessage('Unable to copy Mermaid diagram: no document context available.');
+                    return;
+                }
+
+                if (document.languageId !== 'markdown') {
+                    logger.logWarning('copyDiagramCode invoked for non-markdown document', {
+                        languageId: document.languageId,
+                        uri: document.uri.toString()
+                    });
+                    vscode.window.showInformationMessage('Mermaid Diagram Lens only works with Markdown files.');
+                    return;
+                }
+
+                if (typeof targetLine !== 'number') {
+                    logger.logError('copyDiagramCode missing line information');
+                    vscode.window.showErrorMessage('Unable to copy Mermaid diagram: missing line information.');
+                    return;
+                }
+
+                const blockCode = getMermaidBlockAtLine(document, targetLine);
+                if (!blockCode) {
+                    vscode.window.showInformationMessage('No Mermaid diagram found at this location to copy.');
+                    return;
+                }
+
+                await vscode.env.clipboard.writeText(blockCode);
+                logger.logInfo('Copied Mermaid diagram to clipboard', {
+                    command: 'copyDiagramCode',
+                    line: targetLine,
+                    length: blockCode.length
+                });
+                vscode.window.showInformationMessage('Mermaid diagram copied to the clipboard.');
+            } catch (error) {
+                logger.logError(
+                    'Failed to copy Mermaid diagram code',
+                    error instanceof Error ? error : new Error(String(error))
+                );
+                vscode.window.showErrorMessage('Unable to copy Mermaid diagram. See output for details.');
+            }
+        }
     );
 
     // Register command to show preview
@@ -273,6 +367,7 @@ export function activate(context: vscode.ExtensionContext) {
         showPreviewCommand,
         showPreviewToSideCommand,
         showDiagramAtPositionCommand,
+        copyDiagramCodeCommand,
         changeDocumentSubscription,
         changeActiveEditorSubscription,
         visibleEditorsSubscription,
