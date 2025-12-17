@@ -52,6 +52,10 @@
       {
         "command": "mermaid-preview.showDiagramAtPosition",
         "title": "Mermaid Diagram Lens: Preview Diagram Here"
+      },
+      {
+        "command": "mermaid-preview.copyDiagramCode",
+        "title": "Mermaid Diagram Lens: Copy Diagram Code"
       }
     ],
     "menus": {
