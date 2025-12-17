@@ -6,6 +6,15 @@
 
 ### Changes
 
+## [1.1.2](https://github.com/onlyutkarsh/mermaid-preview-extension/compare/v1.1.1...v1.1.2) (2025-12-16)
+
+
+### Bug Fixes
+
+* enhance panning functionality and improve cursor styles in MermaidPreviewPanel ([80d12c0](https://github.com/onlyutkarsh/mermaid-preview-extension/commit/80d12c09d82c7f460fa115ca99eac7861e2ecb44))
+
+
+
 ## [1.1.1](https://github.com/onlyutkarsh/mermaid-preview-extension/compare/v1.1.0...v1.1.1) (2025-12-15)
 
 
