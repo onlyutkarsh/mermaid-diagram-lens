@@ -1,3 +1,12 @@
+## [1.2.1](https://github.com/onlyutkarsh/mermaid-preview-extension/compare/v1.2.0...v1.2.1) (2025-12-18)
+
+
+### Bug Fixes
+
+* update demo image links to use absolute URLs in README.md ([9697beb](https://github.com/onlyutkarsh/mermaid-preview-extension/commit/9697beb40c6e16d3c7ab12b90d6a9bb113daa3be))
+
+
+
 # [1.2.0](https://github.com/onlyutkarsh/mermaid-preview-extension/compare/v1.1.3...v1.2.0) (2025-12-18)
 
 
