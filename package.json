@@ -134,7 +134,7 @@
     "esbuild-base": "rimraf out && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
     "esbuild": "npm run -S esbuild-base -- --sourcemap && npm run copy-mermaid",
     "esbuild-watch": "npm run -S esbuild-base -- --sourcemap --watch",
-    "copy-mermaid": "shx rm -rf out/mermaid && shx mkdir -p out/mermaid && shx cp -r node_modules/mermaid/dist out/mermaid/",
+    "copy-mermaid": "shx rm -rf out/mermaid && shx mkdir -p out/mermaid/dist/chunks && shx cp node_modules/mermaid/dist/mermaid.esm.min.mjs out/mermaid/dist/ && shx cp -r node_modules/mermaid/dist/chunks/mermaid.esm.min out/mermaid/dist/chunks/",
     "compile": "tsc -p ./ && npm run copy-mermaid",
     "watch": "npm run copy-mermaid && tsc -watch -p ./",
     "lint": "eslint src --ext ts",
