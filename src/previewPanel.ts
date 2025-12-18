@@ -1412,8 +1412,8 @@ export class MermaidPreviewPanel {
             flex: 1;
             overflow: auto;
             background-color: var(--vscode-editor-background);
-            cursor: -webkit-grab;
             cursor: grab;
+            cursor: -webkit-grab;
             position: relative;
         }
 
@@ -1422,8 +1422,8 @@ export class MermaidPreviewPanel {
             min-height: 100%;
             transform-origin: center center;
             will-change: transform;
-            cursor: -webkit-grab;
             cursor: grab;
+            cursor: -webkit-grab;
         }
 
         #diagrams-container {
@@ -1431,23 +1431,23 @@ export class MermaidPreviewPanel {
             display: flex;
             flex-direction: column;
             gap: 32px;
-            cursor: -webkit-grab;
             cursor: grab;
+            cursor: -webkit-grab;
         }
 
         body.is-panning #diagram-viewport {
-            cursor: -webkit-grabbing !important;
             cursor: grabbing !important;
+            cursor: -webkit-grabbing !important;
         }
 
         body.is-panning #diagram-stage {
-            cursor: -webkit-grabbing !important;
             cursor: grabbing !important;
+            cursor: -webkit-grabbing !important;
         }
 
         body.is-panning #diagrams-container {
-            cursor: -webkit-grabbing !important;
             cursor: grabbing !important;
+            cursor: -webkit-grabbing !important;
         }
 
         .diagram-shell {
@@ -1480,8 +1480,8 @@ export class MermaidPreviewPanel {
         .diagram-shell *,
         .diagram-content,
         .diagram-content * {
-            cursor: -webkit-grab !important;
             cursor: grab !important;
+            cursor: -webkit-grab !important;
         }
 
         body.is-panning #diagram-viewport *,
@@ -1491,8 +1491,8 @@ export class MermaidPreviewPanel {
         body.is-panning .diagram-shell *,
         body.is-panning .diagram-content,
         body.is-panning .diagram-content * {
-            cursor: -webkit-grabbing !important;
             cursor: grabbing !important;
+            cursor: -webkit-grabbing !important;
         }
 
         .dropdown {
