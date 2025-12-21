@@ -1,3 +1,17 @@
+# [1.3.0](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.2.3...v1.3.0) (2025-12-21)
+
+
+### Bug Fixes
+
+* update demo image links in README.md to reflect new project name ([06056f5](https://github.com/onlyutkarsh/mermaid-viewer/commit/06056f58f236e5bb1b8df2450a84fad44bb848b6))
+
+
+### Features
+
+* Add support for Mermaid syntax highlighting and folding in .mmd files ([bccb085](https://github.com/onlyutkarsh/mermaid-viewer/commit/bccb0851c335ba6bfb7899f97b667bb6885e7c87))
+
+
+
 ## [1.2.3](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.2.2...v1.2.3) (2025-12-20)
 
 
