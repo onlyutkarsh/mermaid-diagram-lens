@@ -105,6 +105,13 @@
         }
       ]
     },
+    "markdown.markdownItPlugins": true,
+    "markdown.previewScripts": [
+      "./out/mermaidLoader.js"
+    ],
+    "markdown.previewStyles": [
+      "./styles/mermaid-preview.css"
+    ],
     "configuration": {
       "title": "Mermaid Viewer",
       "properties": {
@@ -180,12 +187,13 @@
   },
   "scripts": {
     "prepare": "lefthook install",
-    "vscode:prepublish": "npm run -S esbuild-base -- --minify && npm run copy-mermaid",
+    "vscode:prepublish": "npm run -S esbuild-base -- --minify && npm run esbuild-loader -- --minify && npm run copy-mermaid",
     "esbuild-base": "rimraf out && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
-    "esbuild": "npm run -S esbuild-base -- --sourcemap && npm run copy-mermaid",
-    "esbuild-watch": "npm run -S esbuild-base -- --sourcemap --watch",
+    "esbuild-loader": "esbuild ./src/mermaidLoader.ts --bundle --outfile=out/mermaidLoader.js --format=iife --platform=browser",
+    "esbuild": "npm run -S esbuild-base -- --sourcemap && npm run esbuild-loader -- --sourcemap && npm run copy-mermaid",
+    "esbuild-watch": "npm run -S esbuild-base -- --sourcemap --watch & npm run esbuild-loader -- --sourcemap --watch && npm run copy-mermaid",
     "copy-mermaid": "shx rm -rf out/mermaid && shx mkdir -p out/mermaid/dist/chunks && shx cp node_modules/mermaid/dist/mermaid.esm.min.mjs out/mermaid/dist/ && shx cp -r node_modules/mermaid/dist/chunks/mermaid.esm.min out/mermaid/dist/chunks/",
-    "compile": "tsc -p ./ && npm run copy-mermaid",
+    "compile": "tsc -p ./ && npm run copy-mermaid && esbuild ./src/mermaidLoader.ts --bundle --outfile=out/mermaidLoader.js --format=iife --platform=browser",
     "watch": "npm run copy-mermaid && tsc -watch -p ./",
     "lint": "biome check src",
     "lint:fix": "biome check --write src",
