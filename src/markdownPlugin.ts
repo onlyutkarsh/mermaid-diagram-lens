@@ -57,7 +57,7 @@ export async function registerMarkdownPlugin(
 ): Promise<void> {
 	try {
 		// Create the plugin
-		const plugin = createMarkdownItPlugin();
+		const _plugin = createMarkdownItPlugin();
 
 		// The markdown.registerMarkdownItPlugin API is available but not officially documented
 		// It's used by other popular extensions (e.g., markdown-mermaid)

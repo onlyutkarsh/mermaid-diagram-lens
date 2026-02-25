@@ -152,7 +152,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Register markdown-it plugin for native markdown preview support
 	try {
-		const markdownItPlugin = createMarkdownItPlugin();
+		const _markdownItPlugin = createMarkdownItPlugin();
 		// The plugin is automatically picked up by VS Code when:
 		// 1. We declare "markdown.markdownItPlugins": true in package.json
 		// 2. We export the createMarkdownItPlugin function

@@ -92,11 +92,11 @@ const log = {
 
 		// Switch theme for a diagram
 		function setTheme(
-			diagramId: string,
+			_diagramId: string,
 			theme: string,
 			activeBtn: HTMLButtonElement,
 			inactiveBtn: HTMLButtonElement,
-			wrapper: HTMLElement,
+			_wrapper: HTMLElement,
 			toolbar: HTMLElement,
 		) {
 			// Update button states
@@ -158,11 +158,12 @@ const log = {
 				'pre > code.language-mermaid',
 			);
 
-			log.info(`Found ${codeBlocks.length} mermaid code block(s)`);
+			log.info(`Found ${codeBlocks.length} standard mermaid code block(s)`);
 
 			let rendered = 0;
 			const currentTheme = getStoredTheme();
 
+			// Process standard ```mermaid blocks
 			for (const block of codeBlocks) {
 				// Skip if already processed
 				if (block.hasAttribute('data-mermaid-processed')) {
@@ -217,27 +218,98 @@ const log = {
 				} catch (error) {
 					log.error('Failed to render diagram:', error);
 					block.setAttribute('data-mermaid-processed', 'error');
-
-					// Show error
-					const pre = block.parentElement;
-					if (pre) {
-						const errorDiv = document.createElement('div');
-						errorDiv.style.color = '#d32f2f';
-						errorDiv.style.padding = '10px';
-						errorDiv.style.backgroundColor = '#ffebee';
-						errorDiv.style.borderRadius = '4px';
-						errorDiv.style.marginBottom = '10px';
-						errorDiv.style.fontFamily = 'monospace';
-						errorDiv.style.fontSize = '12px';
-						const msg = error instanceof Error ? error.message : String(error);
-						errorDiv.textContent = `❌ Mermaid error: ${msg}`;
-						pre.insertAdjacentElement('beforebegin', errorDiv);
-					}
 				}
 			}
 
-			log.info(`Rendering complete: ${rendered} diagram(s) processed`);
-			return rendered;
+			// Process ADO :::mermaid syntax
+			await processAdoMermaidBlocks();
+
+			log.info(`Total diagrams rendered: ${rendered}`);
+		}
+
+		// Function to find and render ADO-style :::mermaid blocks
+		async function processAdoMermaidBlocks() {
+			const currentTheme = getStoredTheme();
+
+			// Find all text nodes that might contain :::mermaid
+			const walker = document.createTreeWalker(
+				document.body,
+				NodeFilter.SHOW_TEXT,
+				null,
+			);
+
+			const textNodes: Node[] = [];
+			let node: Node | null = walker.nextNode();
+			while (node) {
+				const text = node.textContent || '';
+				// Match both :::mermaid and ::: mermaid (with space)
+				if (text.includes(':::') && /:::\s*mermaid/i.test(text)) {
+					textNodes.push(node);
+				}
+				node = walker.nextNode();
+			}
+
+			for (const textNode of textNodes) {
+				const parentElement = textNode.parentElement;
+				if (
+					!parentElement ||
+					parentElement.hasAttribute('data-mermaid-processed')
+				) {
+					continue;
+				}
+
+				const text = parentElement.textContent || '';
+				// Match both :::mermaid and ::: mermaid (with optional space)
+				const adoPattern = /:::\s*mermaid\s*\n([\s\S]*?)\n:::/gi;
+				const matches = [...text.matchAll(adoPattern)];
+
+				if (matches.length === 0) continue;
+
+				parentElement.setAttribute('data-mermaid-processed', 'true');
+
+				for (const match of matches) {
+					const code = match[1].trim();
+					if (!code) continue;
+
+					try {
+						const diagramId = `mermaid-ado-${Math.random().toString(36).substring(7)}`;
+						log.info(`Rendering ADO diagram: ${diagramId}`);
+
+						// Render diagram to SVG
+						const renderedDiagram = await mermaid.render(diagramId, code);
+						const svgContent =
+							typeof renderedDiagram === 'string'
+								? renderedDiagram
+								: (renderedDiagram as any).svg;
+
+						// Create wrapper with light background
+						const wrapper = document.createElement('div');
+						wrapper.className = 'mermaid-preview-wrapper';
+						if (currentTheme === 'dark') {
+							wrapper.classList.add('dark-theme');
+						}
+						wrapper.innerHTML = svgContent;
+
+						// Create toolbar
+						const toolbar = createToolbar(diagramId, wrapper);
+
+						// Create container for toolbar + wrapper
+						const container = document.createElement('div');
+						container.className = 'mermaid-block';
+						container.style.margin = '1.5em 0';
+						container.appendChild(toolbar);
+						container.appendChild(wrapper);
+
+						// Replace the parent element's content with the rendered diagram
+						parentElement.innerHTML = '';
+						parentElement.appendChild(container);
+
+						log.info(`Successfully rendered ADO diagram: ${diagramId}`);
+					} catch (error) {
+						log.error('Failed to render ADO diagram:', error);
+					}
+				}
+			}
 		}
 
 		// Wait for DOM to be ready
