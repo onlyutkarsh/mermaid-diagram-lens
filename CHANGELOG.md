@@ -1,3 +1,12 @@
+## [1.3.7](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.3.6...v1.3.7) (2026-02-25)
+
+
+### Features
+
+* implement markdown-it plugin for Mermaid diagram support in markdown and enhance preview styling ([3be8ee0](https://github.com/onlyutkarsh/mermaid-viewer/commit/3be8ee0380d9ae8649bd1607d9da56553447d84b))
+
+
+
 ## [1.3.6](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.3.5...v1.3.6) (2026-01-21)
 
 
