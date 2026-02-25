@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { MermaidFoldingProvider } from './foldingProvider';
+import { createMarkdownItPlugin } from './markdownPlugin';
 import { MermaidPreviewPanel, MermaidPreviewSerializer } from './previewPanel';
 import { Logger } from './util/logger';
 
@@ -148,6 +149,20 @@ export function activate(context: vscode.ExtensionContext) {
 	const logger = Logger.instance;
 	context.subscriptions.push(logger);
 	logger.logInfo('Mermaid Viewer extension activating...');
+
+	// Register markdown-it plugin for native markdown preview support
+	try {
+		const markdownItPlugin = createMarkdownItPlugin();
+		// The plugin is automatically picked up by VS Code when:
+		// 1. We declare "markdown.markdownItPlugins": true in package.json
+		// 2. We export the createMarkdownItPlugin function
+		logger.logInfo('Markdown-it plugin registered for native preview support');
+	} catch (error) {
+		logger.logError(
+			'Failed to register markdown-it plugin',
+			error instanceof Error ? error : new Error(String(error)),
+		);
+	}
 
 	// Register webview panel serializer for restoring panels after reload
 	const serializer = new MermaidPreviewSerializer(context.extensionUri);
