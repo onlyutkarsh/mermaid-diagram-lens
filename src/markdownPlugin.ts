@@ -8,6 +8,67 @@ import type * as vscode from 'vscode';
 const mermaidLanguageId = 'mermaid';
 const containerTokenName = 'mermaidContainer';
 
+type HighlightFn = (code: string, lang: string, attrs: string) => string;
+
+interface MarkdownItTokenLike {
+	content: string;
+	markup?: string;
+	block?: boolean;
+	info?: string;
+	map?: [number, number];
+}
+
+interface MarkdownItStateLike {
+	bMarks: number[];
+	tShift: number[];
+	eMarks: number[];
+	sCount: number[];
+	blkIndent: number;
+	src: string;
+	parentType: string;
+	lineMax: number;
+	line: number;
+	skipSpaces: (pos: number) => number;
+	push: (
+		tokenName: string,
+		tagName: string,
+		nesting: number,
+	) => MarkdownItTokenLike;
+	getLines: (
+		begin: number,
+		end: number,
+		indent: number,
+		keepLastLF: boolean,
+	) => string;
+}
+
+export interface MarkdownItLike {
+	options: {
+		highlight?: HighlightFn;
+	};
+	block: {
+		ruler: {
+			before: (
+				beforeName: string,
+				ruleName: string,
+				rule: (
+					state: MarkdownItStateLike,
+					startLine: number,
+					endLine: number,
+					silent: boolean,
+				) => boolean,
+				options: { alt: string[] },
+			) => void;
+		};
+	};
+	renderer: {
+		rules: Record<
+			string,
+			(tokens: MarkdownItTokenLike[], idx: number) => string
+		>;
+	};
+}
+
 function preProcess(source: string): string {
 	return source
 		.replace(/&/g, '&amp;')
@@ -23,7 +84,7 @@ function preProcess(source: string): string {
  * can find diagrams with the same selectors.
  */
 export function createMarkdownItPlugin() {
-	return (md: any) => {
+	return (md: MarkdownItLike): MarkdownItLike => {
 		// Override the fence rendering rule (backtick syntax: ```mermaid)
 		const highlight = md.options.highlight;
 		md.options.highlight = (code: string, lang: string, attrs: string) => {
@@ -43,7 +104,12 @@ export function createMarkdownItPlugin() {
 		md.block.ruler.before(
 			'fence',
 			containerTokenName,
-			(state: any, startLine: number, endLine: number, silent: boolean) => {
+			(
+				state: MarkdownItStateLike,
+				startLine: number,
+				endLine: number,
+				silent: boolean,
+			) => {
 				try {
 					let pos: number;
 					let autoClosed = false;
@@ -130,8 +196,7 @@ export function createMarkdownItPlugin() {
 
 					const old_parent = state.parentType;
 					const old_line_max = state.lineMax;
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					state.parentType = 'container' as any;
+					state.parentType = 'container';
 					state.lineMax = nextLine;
 
 					const containerToken = state.push(containerTokenName, 'div', 1);
@@ -160,7 +225,10 @@ export function createMarkdownItPlugin() {
 		);
 
 		// Renderer for the ADO :::mermaid container - matches reference extension output
-		md.renderer.rules[containerTokenName] = (tokens: any[], idx: number) => {
+		md.renderer.rules[containerTokenName] = (
+			tokens: MarkdownItTokenLike[],
+			idx: number,
+		) => {
 			const src = tokens[idx].content;
 			return `<div class="${mermaidLanguageId}">${preProcess(src)}</div>`;
 		};

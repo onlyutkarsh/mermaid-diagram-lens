@@ -5,6 +5,11 @@ pre-commit:
   parallel: true
   commands:
     lint:
-      glob: "*.{ts,js}"
+      glob: "**/*.{ts,js}"
       run: npm run lint:fix {staged_files}
       stage_fixed: true
+
+pre-push:
+  commands:
+    verify:
+      run: npm run check

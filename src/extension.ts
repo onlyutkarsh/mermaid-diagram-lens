@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { MermaidFoldingProvider } from './foldingProvider';
 import {
 	createMarkdownItPlugin,
+	type MarkdownItLike,
 	registerMarkdownPlugin,
 } from './markdownPlugin';
 import { MermaidPreviewPanel, MermaidPreviewSerializer } from './previewPanel';
@@ -568,7 +569,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// VS Code markdown preview reads this object from activate() and uses it
 	// to transform markdown before preview scripts run.
 	return {
-		extendMarkdownIt(md: any) {
+		extendMarkdownIt(md: MarkdownItLike) {
 			Logger.instance.logInfo(
 				`extendMarkdownIt (activate return) called by VS Code (md=${md ? 'present' : 'missing'})`,
 			);
@@ -580,7 +581,7 @@ export async function activate(context: vscode.ExtensionContext) {
 export function deactivate() {}
 
 // Export API for VS Code's markdown preview to use our markdown-it plugin
-export function extendMarkdownIt(md: any) {
+export function extendMarkdownIt(md: MarkdownItLike) {
 	Logger.instance.logInfo(
 		`extendMarkdownIt called by VS Code (md=${md ? 'present' : 'missing'})`,
 	);

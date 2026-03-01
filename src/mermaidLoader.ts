@@ -225,7 +225,7 @@ if (typeof window !== 'undefined') {
 		mermaid.initialize({
 			startOnLoad: false,
 			securityLevel: 'loose',
-			theme: (isDark() ? 'dark' : 'default') as any,
+			theme: isDark() ? 'dark' : 'default',
 		});
 
 		for (const el of els) {
