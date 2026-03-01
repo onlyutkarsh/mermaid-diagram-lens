@@ -1,3 +1,12 @@
+## [1.3.10](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.3.9...v1.3.10) (2026-03-01)
+
+
+### Features
+
+* add support for ADO-style :::mermaid syntax with space and improve regex handling for windows machine ([b633ee4](https://github.com/onlyutkarsh/mermaid-viewer/commit/b633ee4285b7d145e41a467537b799addd327758))
+
+
+
 ## [1.3.9](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.3.8...v1.3.9) (2026-03-01)
 
 
