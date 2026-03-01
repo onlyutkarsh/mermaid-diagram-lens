@@ -1,3 +1,12 @@
+## [1.3.9](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.3.8...v1.3.9) (2026-03-01)
+
+
+### Features
+
+* enhance Mermaid diagram support with ADO-style :::mermaid syntax and update rendering logic ([c22300b](https://github.com/onlyutkarsh/mermaid-viewer/commit/c22300be37bbb3abc62e932642cb55cda0f662e2))
+
+
+
 ## [1.3.8](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.3.7...v1.3.8) (2026-02-25)
 
 
