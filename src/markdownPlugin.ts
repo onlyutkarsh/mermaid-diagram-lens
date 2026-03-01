@@ -1,168 +1,168 @@
 /**
  * Markdown-it Plugin for Mermaid Diagram Support
- * Transforms mermaid code blocks into renderable divs
+ * Closely follows https://github.com/mjbvz/vscode-markdown-mermaid
  */
 
 import type * as vscode from 'vscode';
 
+const mermaidLanguageId = 'mermaid';
+const containerTokenName = 'mermaidContainer';
+
+function preProcess(source: string): string {
+	return source
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/\n+$/, '')
+		.trimStart();
+}
+
 /**
- * Creates a markdown-it plugin function for rendering mermaid blocks
- * @param context VS Code extension context
- * @returns Plugin function for markdown-it
+ * Creates a markdown-it plugin function for rendering mermaid blocks.
+ * Output format matches vscode-markdown-mermaid so mermaidLoader.ts
+ * can find diagrams with the same selectors.
  */
 export function createMarkdownItPlugin() {
 	return (md: any) => {
-		console.log('[markdown-it plugin] Initializing plugin');
-		// Store the default fence renderer
-		const defaultRender =
-			md.renderer.rules.fence ||
-			((tokens: any[], idx: number) =>
-				md.utils.escapeHtml(tokens[idx].content));
-
 		// Override the fence rendering rule (backtick syntax: ```mermaid)
-		md.renderer.rules.fence = (
-			tokens: any[],
-			idx: number,
-			options: any,
-			env: any,
-			self: any,
-		) => {
-			const token = tokens[idx];
-
-			// Check if this is a mermaid code block
-			// token.info contains the language identifier (e.g., "mermaid")
-			if (token.info === 'mermaid' || token.info.startsWith('mermaid')) {
-				const code = token.content;
-
-				// Output standard HTML structure that mermaidLoader.ts expects:
-				// <pre><code class="language-mermaid">CODE</code></pre>
-				const escapedCode = md.utils.escapeHtml(code);
-				return `<pre><code class="language-mermaid">${escapedCode}</code></pre>\n`;
+		const highlight = md.options.highlight;
+		md.options.highlight = (code: string, lang: string, attrs: string) => {
+			if (lang && /^mermaid\b/i.test(lang.trim())) {
+				return `<pre class="${mermaidLanguageId}" style="all: unset;">${preProcess(code)}</pre>`;
 			}
-
-			// For all other code blocks, use default renderer
-			return defaultRender(tokens, idx, options, env, self);
+			return highlight?.(code, lang, attrs) ?? code;
 		};
 
-		// Add block rule for ADO wiki :::mermaid container syntax
+		// Add block rule for ADO wiki :::mermaid container syntax.
+		// Ported from the reference implementation in markdown-it-container.
+		const minMarkers = 3;
+		const markerStr = ':';
+		const markerChar = markerStr.charCodeAt(0);
+		const markerLen = markerStr.length;
+
 		md.block.ruler.before(
 			'fence',
-			'mermaid_container',
+			containerTokenName,
 			(state: any, startLine: number, endLine: number, silent: boolean) => {
-				console.log(
-					'[markdown-it] Checking line',
-					startLine,
-					'for ::: mermaid syntax',
-				);
-				let pos: number;
-				let start = state.bMarks[startLine] + state.tShift[startLine];
-				let max = state.eMarks[startLine];
+				try {
+					let pos: number;
+					let autoClosed = false;
+					let start = state.bMarks[startLine] + state.tShift[startLine];
+					let max = state.eMarks[startLine];
 
-				// Check first character - must be ':'
-				if (state.src.charCodeAt(start) !== 0x3a /* : */) {
-					console.log('[markdown-it] Line', startLine, 'does not start with :');
-					return false;
-				}
+					// Quick check: first character must be ':'
+					if (markerChar !== state.src.charCodeAt(start)) {
+						return false;
+					}
 
-				// Count the ':' characters (must be at least 3)
-				for (pos = start + 1; pos <= max; pos++) {
-					if (state.src.charCodeAt(pos) !== 0x3a) {
+					// Count the marker characters
+					for (pos = start + 1; pos <= max; pos++) {
+						if (markerStr[(pos - start) % markerLen] !== state.src[pos]) {
+							break;
+						}
+					}
+
+					const markerCount = Math.floor((pos - start) / markerLen);
+					if (markerCount < minMarkers) {
+						return false;
+					}
+					pos -= (pos - start) % markerLen;
+
+					const markup = state.src.slice(start, pos);
+					const params = state.src.slice(pos, max);
+
+					// Must start with 'mermaid' (case insensitive)
+					if (params.trim().split(' ')[0].toLowerCase() !== 'mermaid') {
+						return false;
+					}
+
+					if (silent) {
+						return true;
+					}
+
+					// Search for the closing :::
+					let nextLine = startLine;
+					for (;;) {
+						nextLine++;
+						if (nextLine >= endLine) {
+							// Auto-close at end of document / parent block
+							break;
+						}
+
+						start = state.bMarks[nextLine] + state.tShift[nextLine];
+						max = state.eMarks[nextLine];
+
+						if (start < max && state.sCount[nextLine] < state.blkIndent) {
+							// Non-empty line with negative indent stops the block
+							break;
+						}
+
+						if (markerChar !== state.src.charCodeAt(start)) {
+							continue;
+						}
+
+						if (state.sCount[nextLine] - state.blkIndent >= 4) {
+							// Overly-indented closing fence — skip
+							continue;
+						}
+
+						for (pos = start + 1; pos <= max; pos++) {
+							if (markerStr[(pos - start) % markerLen] !== state.src[pos]) {
+								break;
+							}
+						}
+
+						// Closing marker must be at least as long as opening
+						if (Math.floor((pos - start) / markerLen) < markerCount) {
+							continue;
+						}
+
+						// Tail must be spaces only
+						pos -= (pos - start) % markerLen;
+						pos = state.skipSpaces(pos);
+						if (pos < max) {
+							continue;
+						}
+
+						autoClosed = true;
 						break;
 					}
-				}
 
-				const markerCount = pos - start;
-				if (markerCount < 3) {
-					return false;
-				}
+					const old_parent = state.parentType;
+					const old_line_max = state.lineMax;
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					state.parentType = 'container' as any;
+					state.lineMax = nextLine;
 
-				// Get params (everything after the ::: markers)
-				const params = state.src.slice(pos, max);
-				console.log('[markdown-it] Line', startLine, 'params:', params);
-
-				// Check if first word is 'mermaid' (case insensitive)
-				const firstWord = params.trim().split(' ')[0].toLowerCase();
-				console.log('[markdown-it] Line', startLine, 'firstWord:', firstWord);
-				if (firstWord !== 'mermaid') {
-					console.log(
-						'[markdown-it] Line',
-						startLine,
-						'first word is not mermaid',
+					const containerToken = state.push(containerTokenName, 'div', 1);
+					containerToken.markup = markup;
+					containerToken.block = true;
+					containerToken.info = params;
+					containerToken.map = [startLine, nextLine];
+					containerToken.content = state.getLines(
+						startLine + 1,
+						nextLine,
+						state.blkIndent,
+						true,
 					);
-					return false;
-				}
 
-				if (silent) {
+					state.parentType = old_parent;
+					state.lineMax = old_line_max;
+					state.line = nextLine + (autoClosed ? 1 : 0);
 					return true;
-				}
-
-				// Find the closing :::
-				const nextLine = startLine + 1;
-				let found = false;
-				while (nextLine < endLine) {
-					start = state.bMarks[nextLine] + state.tShift[nextLine];
-					max = state.eMarks[nextLine];
-
-					if (state.src.charCodeAt(start) !== 0x3a) {
-						continue;
-					}
-
-					// Count closing ::: markers
-					for (pos = start + 1; pos <= max; pos++) {
-						if (state.src.charCodeAt(pos) !== 0x3a) {
-							break;
-						}
-					}
-
-					// Must have at least as many markers as opening
-					if (pos - start >= markerCount) {
-						// Make sure rest of line is empty
-						const rest = state.src.slice(pos, max).trim();
-						if (rest === '') {
-							found = true;
-							break;
-						}
-					}
-				}
-
-				if (!found) {
-					console.log('[markdown-it] Line', startLine, 'no closing ::: found');
+				} catch (e) {
+					console.error('[mermaid-plugin] block rule error:', e);
 					return false;
 				}
-
-				console.log(
-					'[markdown-it] Found ::: mermaid block from line',
-					startLine,
-					'to',
-					nextLine,
-				);
-
-				// Collect the content lines between the markers
-				const contentLines: string[] = [];
-				for (let i = startLine + 1; i < nextLine; i++) {
-					contentLines.push(state.src.slice(state.bMarks[i], state.eMarks[i]));
-				}
-
-				console.log('[markdown-it] Content lines:', contentLines.length);
-
-				const token = state.push('mermaid_container', 'div', 0);
-				token.content = contentLines.join('\n');
-				token.map = [startLine, nextLine + 1];
-				token.markup = ':::';
-
-				state.line = nextLine + 1;
-				return true;
 			},
-			{ alt: ['paragraph', 'reference'] },
+			// end rule
+			{ alt: ['paragraph', 'reference', 'blockquote', 'list'] },
 		);
 
-		// Renderer for the ADO :::mermaid container
-		md.renderer.rules['mermaid_container'] = (tokens: any[], idx: number) => {
-			console.log('[markdown-it] Rendering mermaid_container token');
-			const escapedCode = md.utils.escapeHtml(tokens[idx].content);
-			const html = `<pre><code class="language-mermaid">${escapedCode}</code></pre>\n`;
-			console.log('[markdown-it] Generated HTML:', html.substring(0, 100));
-			return html;
+		// Renderer for the ADO :::mermaid container - matches reference extension output
+		md.renderer.rules[containerTokenName] = (tokens: any[], idx: number) => {
+			const src = tokens[idx].content;
+			return `<div class="${mermaidLanguageId}">${preProcess(src)}</div>`;
 		};
 
 		return md;
