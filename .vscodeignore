@@ -24,3 +24,7 @@ SYNTAX-HIGHLIGHTING-SUMMARY.md
 .claude/
 marketplace/
 examples/
+biome.json
+lefthook.yml
+assets/icon.pxd
+.versionrc.json
