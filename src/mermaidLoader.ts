@@ -258,7 +258,7 @@ const log = {
 
 				const text = parentElement.textContent || '';
 				// Match both :::mermaid and ::: mermaid (with optional space)
-				const adoPattern = /:::\s*mermaid\s*\n([\s\S]*?)\n:::/gi;
+				const adoPattern = /:::\s*mermaid\s*\r?\n([\s\S]*?)\r?\n:::/gi;
 				const matches = [...text.matchAll(adoPattern)];
 
 				if (matches.length === 0) continue;

@@ -39,6 +39,10 @@
           "Mermaid",
           "mermaid"
         ],
+        "icon": {
+          "light": "images/mermaid-gutter.svg",
+          "dark": "images/mermaid-gutter.svg"
+        },
         "extensions": [
           ".mmd",
           ".mermaid"
