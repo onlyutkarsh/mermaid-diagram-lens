@@ -1,3 +1,12 @@
+## [1.4.1](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.0...v1.4.1) (2026-03-01)
+
+
+### Features
+
+* Update .vscodeignore to include additional configuration files ([8c037ef](https://github.com/onlyutkarsh/mermaid-viewer/commit/8c037ef4d1478cd41758e21d23a307eae5f3ca10))
+
+
+
 ## [1.4.0](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.3.10...v1.4.0) (2026-03-01)
 
 
