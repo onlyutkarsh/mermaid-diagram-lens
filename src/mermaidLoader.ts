@@ -154,6 +154,10 @@ const log = {
 			);
 
 			log.info(`Found ${codeBlocks.length} standard mermaid code block(s)`);
+			log.info(
+				'Document HTML preview:',
+				document.body.innerHTML.substring(0, 500),
+			);
 
 			let rendered = 0;
 			const currentTheme = getStoredTheme();
