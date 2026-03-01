@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 import { MermaidFoldingProvider } from './foldingProvider';
-import { createMarkdownItPlugin } from './markdownPlugin';
+import {
+	createMarkdownItPlugin,
+	registerMarkdownPlugin,
+} from './markdownPlugin';
 import { MermaidPreviewPanel, MermaidPreviewSerializer } from './previewPanel';
 import { Logger } from './util/logger';
 
@@ -145,17 +148,33 @@ class MermaidGutterDecorator implements vscode.Disposable {
 	}
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 	const logger = Logger.instance;
+	const isUIContext =
+		context.extension.extensionKind === vscode.ExtensionKind.UI;
+
 	context.subscriptions.push(logger);
-	logger.logInfo('Mermaid Viewer extension activating...');
+	logger.logInfo(
+		`Mermaid Viewer extension activating (UI context: ${isUIContext})...`,
+	);
+
+	// Explicitly register the markdown-it plugin to ensure preview integration
+	try {
+		await registerMarkdownPlugin(context);
+		logger.logInfo('Markdown-it plugin explicitly registered');
+	} catch (error) {
+		logger.logError(
+			'Failed to explicitly register markdown-it plugin',
+			error instanceof Error ? error : new Error(String(error)),
+		);
+	}
 
 	// Register markdown-it plugin for native markdown preview support
 	try {
 		const _markdownItPlugin = createMarkdownItPlugin();
 		// The plugin is automatically picked up by VS Code when:
 		// 1. We declare "markdown.markdownItPlugins": true in package.json
-		// 2. We export the createMarkdownItPlugin function
+		// 2. We export the extendMarkdownIt function
 		logger.logInfo('Markdown-it plugin registered for native preview support');
 	} catch (error) {
 		logger.logError(
@@ -173,9 +192,12 @@ export function activate(context: vscode.ExtensionContext) {
 		),
 	);
 
-	const gutterDecorator = new MermaidGutterDecorator(context.extensionUri);
-	context.subscriptions.push(gutterDecorator);
-	gutterDecorator.update(vscode.window.activeTextEditor);
+	// Only register gutter decorators in workspace context (not UI)
+	if (!isUIContext) {
+		const gutterDecorator = new MermaidGutterDecorator(context.extensionUri);
+		context.subscriptions.push(gutterDecorator);
+		gutterDecorator.update(vscode.window.activeTextEditor);
+	}
 
 	// Refresh preview when VS Code theme changes so appearance rules can be re-applied
 	const themeChangeListener = vscode.window.onDidChangeActiveColorTheme(() => {
@@ -517,3 +539,11 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
+// Export API for VS Code's markdown preview to use our markdown-it plugin
+export function extendMarkdownIt(md: any) {
+	Logger.instance.logInfo(
+		`extendMarkdownIt called by VS Code (md=${md ? 'present' : 'missing'})`,
+	);
+	return createMarkdownItPlugin()(md);
+}

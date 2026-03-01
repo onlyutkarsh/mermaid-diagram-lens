@@ -867,9 +867,9 @@ export class MermaidPreviewPanel {
 				match = mermaidRegex.exec(text);
 			}
 
-			// Also support ADO wiki :::mermaid syntax
+			// Also support ADO wiki :::mermaid and ::: mermaid syntax
 			const adoMermaidRegex =
-				/^:::mermaid[^\S\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)?^:::/gm;
+				/^:::\s*mermaid[^\S\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)?^:::/gm;
 			let adoMatch: RegExpExecArray | null = adoMermaidRegex.exec(text);
 
 			while (adoMatch !== null) {

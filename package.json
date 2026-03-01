@@ -4,6 +4,10 @@
   "description": "View your Mermaid diagrams with independent theming, exports, and focused previews.",
   "version": "1.3.10",
   "publisher": "onlyutkarsh",
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -18,9 +22,7 @@
     "markdown",
     "theme"
   ],
-  "activationEvents": [
-    "onLanguage:markdown"
-  ],
+  "activationEvents": [],
   "main": "./out/extension.js",
   "repository": {
     "type": "git",
