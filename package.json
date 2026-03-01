@@ -193,8 +193,8 @@
     "esbuild": "npm run -S esbuild-base -- --sourcemap && npm run esbuild-loader -- --sourcemap && npm run copy-mermaid",
     "esbuild-watch": "npm run -S esbuild-base -- --sourcemap --watch & npm run esbuild-loader -- --sourcemap --watch && npm run copy-mermaid",
     "copy-mermaid": "shx rm -rf out/mermaid && shx mkdir -p out/mermaid/dist/chunks && shx cp node_modules/mermaid/dist/mermaid.esm.min.mjs out/mermaid/dist/ && shx cp -r node_modules/mermaid/dist/chunks/mermaid.esm.min out/mermaid/dist/chunks/",
-    "compile": "tsc -p ./ && npm run copy-mermaid && esbuild ./src/mermaidLoader.ts --bundle --outfile=out/mermaidLoader.js --format=iife --platform=browser",
-    "watch": "npm run copy-mermaid && tsc -watch -p ./",
+    "compile": "npm run esbuild",
+    "watch": "npm run esbuild-watch",
     "lint": "biome check src",
     "lint:fix": "biome check --write src",
     "format": "biome format --write src",
@@ -216,6 +216,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@vscode/codicons": "^0.0.36",
     "mermaid": "^11.12.2"
   },
   "overrides": {

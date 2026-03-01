@@ -18,7 +18,7 @@ export function createMarkdownItPlugin() {
 			((tokens: any[], idx: number) =>
 				md.utils.escapeHtml(tokens[idx].content));
 
-		// Override the fence rendering rule
+		// Override the fence rendering rule (backtick syntax: ```mermaid)
 		md.renderer.rules.fence = (
 			tokens: any[],
 			idx: number,
@@ -41,6 +41,68 @@ export function createMarkdownItPlugin() {
 
 			// For all other code blocks, use default renderer
 			return defaultRender(tokens, idx, options, env, self);
+		};
+
+		// Add block rule for ADO wiki :::mermaid container syntax
+		md.block.ruler.before(
+			'fence',
+			'mermaid_container',
+			(state: any, startLine: number, endLine: number, silent: boolean) => {
+				const startPos = state.bMarks[startLine] + state.tShift[startLine];
+				const startMax = state.eMarks[startLine];
+
+				if (state.tShift[startLine] < 0) {
+					return false;
+				}
+
+				const marker = state.src.slice(startPos, startMax).trim();
+				if (marker !== ':::mermaid' && !marker.startsWith(':::mermaid ')) {
+					return false;
+				}
+
+				if (silent) {
+					return true;
+				}
+
+				// Find the closing :::
+				let nextLine = startLine + 1;
+				let found = false;
+				while (nextLine < endLine) {
+					const linePos = state.bMarks[nextLine] + state.tShift[nextLine];
+					const lineMax = state.eMarks[nextLine];
+					const line = state.src.slice(linePos, lineMax).trim();
+					if (line === ':::') {
+						found = true;
+						break;
+					}
+					nextLine++;
+				}
+
+				if (!found) {
+					return false;
+				}
+
+				// Collect the content lines between the markers
+				const contentLines: string[] = [];
+				for (let i = startLine + 1; i < nextLine; i++) {
+					contentLines.push(state.src.slice(state.bMarks[i], state.eMarks[i]));
+				}
+
+				const token = state.push('mermaid_container', 'div', 0);
+				token.content = contentLines.join('\n');
+				token.map = [startLine, nextLine + 1];
+				token.markup = ':::';
+
+				state.line = nextLine + 1;
+				return true;
+			},
+			{ alt: ['paragraph', 'reference'] },
+		);
+
+		// Renderer for the ADO :::mermaid container
+		md.renderer.rules['mermaid_container'] = (tokens: any[], idx: number) => {
+			const escapedCode = md.utils.escapeHtml(tokens[idx].content);
+			return `<div class="mermaid-block"><pre class="language-mermaid">${escapedCode}</pre></div>\n`;
 		};
 	};
 }

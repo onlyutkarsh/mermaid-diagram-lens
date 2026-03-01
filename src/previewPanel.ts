@@ -661,7 +661,7 @@ export class MermaidPreviewPanel {
 
 		if (!mermaidCode) {
 			webview.html = this._getErrorHtml(
-				'No Mermaid diagram found. Wrap your diagram in ```mermaid code blocks.',
+				'No Mermaid diagram found. Wrap your diagram in ```mermaid code blocks or :::mermaid containers.',
 			);
 			return;
 		}
@@ -848,7 +848,7 @@ export class MermaidPreviewPanel {
 				return blocks;
 			}
 
-			// For markdown files, extract mermaid code blocks
+			// For markdown files, extract mermaid code blocks (backtick fenced syntax)
 			const mermaidRegex =
 				/```mermaid[^\S\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)?```/g;
 			let match: RegExpExecArray | null = mermaidRegex.exec(text);
@@ -866,6 +866,30 @@ export class MermaidPreviewPanel {
 				}
 				match = mermaidRegex.exec(text);
 			}
+
+			// Also support ADO wiki :::mermaid syntax
+			const adoMermaidRegex =
+				/^:::mermaid[^\S\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)?^:::/gm;
+			let adoMatch: RegExpExecArray | null = adoMermaidRegex.exec(text);
+
+			while (adoMatch !== null) {
+				const diagramCode = adoMatch[1]?.trim();
+				if (diagramCode) {
+					const startPos = document.positionAt(adoMatch.index);
+					const endPos = document.positionAt(
+						adoMatch.index + adoMatch[0].length,
+					);
+					blocks.push({
+						code: diagramCode,
+						startLine: startPos.line,
+						endLine: endPos.line,
+					});
+				}
+				adoMatch = adoMermaidRegex.exec(text);
+			}
+
+			// Sort blocks by their position in the document
+			blocks.sort((a, b) => a.startLine - b.startLine);
 
 			return blocks;
 		} catch (error) {
@@ -950,6 +974,16 @@ export class MermaidPreviewPanel {
 					'mermaid.esm.min.mjs',
 				),
 			);
+			const codiconStylesUri = webview.asWebviewUri(
+				vscode.Uri.joinPath(
+					this._extensionUri,
+					'node_modules',
+					'@vscode',
+					'codicons',
+					'dist',
+					'codicon.css',
+				),
+			);
 
 			const docId = documentId ?? 'unknown';
 			const nonce = this._generateNonce();
@@ -963,6 +997,7 @@ export class MermaidPreviewPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mermaid Diagram Lens</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; script-src 'nonce-${nonce}' ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; connect-src ${webview.cspSource} https:;">
+    <link rel="stylesheet" href="${codiconStylesUri}">
     <script type="module" nonce="${nonce}">
         import mermaid from '${mermaidScriptUri}';
 
@@ -2204,13 +2239,14 @@ export class MermaidPreviewPanel {
         }
 
         .toolbar {
-            background-color: var(--vscode-editorWidget-background);
-            border-bottom: 1px solid var(--vscode-editorWidget-border);
+            background-color: #2d2d2d;
+            border-bottom: 1px solid #404040;
             padding: 10px 16px;
             display: flex;
             align-items: center;
             gap: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            color: #e0e0e0;
             z-index: 2;
         }
 
@@ -2219,7 +2255,7 @@ export class MermaidPreviewPanel {
             align-items: center;
             gap: 8px;
             padding: 0 8px;
-            border-right: 1px solid var(--vscode-editorWidget-border);
+            border-right: 1px solid #404040;
         }
 
         .toolbar-group:last-child {
@@ -2227,9 +2263,9 @@ export class MermaidPreviewPanel {
         }
 
         .toolbar button {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
+            background-color: transparent;
+            color: #e0e0e0;
+            border: 1px solid transparent;
             padding: 6px 12px;
             border-radius: 4px;
             font-size: 12px;
@@ -2237,8 +2273,15 @@ export class MermaidPreviewPanel {
             font-family: var(--vscode-font-family);
         }
 
+
         .toolbar button:hover {
-            background-color: var(--vscode-button-hoverBackground);
+            background-color: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .toolbar .codicon {
+            font-size: 20px;
+            line-height: 1;
         }
 
         .toolbar button:disabled {
@@ -2251,6 +2294,7 @@ export class MermaidPreviewPanel {
             text-align: center;
             font-size: 12px;
             font-weight: 600;
+            color: #e0e0e0;
         }
 
         #diagram-viewport {
@@ -2345,9 +2389,9 @@ export class MermaidPreviewPanel {
         }
 
         .action-btn {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
+            background-color: transparent;
+            color: #e0e0e0;
+            border: 1px solid transparent;
             padding: 6px 12px;
             border-radius: 4px;
             font-size: 12px;
@@ -2399,6 +2443,7 @@ export class MermaidPreviewPanel {
             font-weight: 600;
             min-width: 140px;
             text-align: center;
+            color: #e0e0e0;
         }
 
         .keyboard-shortcuts-hint {
@@ -2408,13 +2453,14 @@ export class MermaidPreviewPanel {
         }
 
         .shortcuts-icon {
-            font-size: 32px;
-            opacity: 0.6;
+            font-size: 20px;
+            opacity: 0.8;
             cursor: pointer;
             user-select: none;
             display: inline-block;
             padding: 0 4px;
             transition: opacity 0.2s ease, transform 0.1s ease;
+            color: #e0e0e0;
         }
 
         .shortcuts-icon:hover {
@@ -2488,9 +2534,13 @@ export class MermaidPreviewPanel {
 <body class="${appearanceClass}">
     <div class="toolbar">
         <div class="toolbar-group">
-            <button data-action="zoom-out">−</button>
+            <button data-action="zoom-out" title="Zoom out" aria-label="Zoom out">
+                <span class="codicon codicon-zoom-out" aria-hidden="true"></span>
+            </button>
             <span id="zoom-level">100%</span>
-            <button data-action="zoom-in">+</button>
+            <button data-action="zoom-in" title="Zoom in" aria-label="Zoom in">
+                <span class="codicon codicon-zoom-in" aria-hidden="true"></span>
+            </button>
             <button data-action="zoom-reset">Reset</button>
         </div>
         <div class="toolbar-group" id="diagram-controls">
@@ -2499,7 +2549,9 @@ export class MermaidPreviewPanel {
             <button id="next-diagram" data-direction="1">▶</button>
         </div>
         <div class="toolbar-group keyboard-shortcuts-hint">
-            <span class="shortcuts-icon" id="keyboard-shortcuts-icon" title="Click for keyboard shortcuts">⌨</span>
+            <span class="shortcuts-icon" id="keyboard-shortcuts-icon" title="Click for keyboard shortcuts" aria-label="Keyboard shortcuts">
+                <span class="codicon codicon-keyboard" aria-hidden="true"></span>
+            </span>
         </div>
         <div class="toolbar-group dropdown">
             <button class="action-btn" id="theme-button" data-dropdown-toggle="theme">Theme ▾</button>
