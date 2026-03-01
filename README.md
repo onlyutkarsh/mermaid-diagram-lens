@@ -12,7 +12,7 @@ A VSCode extension that gives you a powerful viewer for Mermaid diagrams with in
 - **Keyboard Shortcuts**: Use `+`/`-` to zoom, `R` to reset, and arrow keys to pan around diagrams
 - **Export Options**: Save any diagram as SVG, PNG (1x-4x), or JPG (1x-4x) right from the preview toolbar. Dimensions are displayed in the menu, so you know exactly what you're exporting
 - **Copy to Clipboard**: Copy diagrams directly to your clipboard as SVG, PNG, or JPG for quick pasting into other apps
-- **On-Document Shortcuts**: Click the CodeLens button or gutter icon on each mermaid fenced block to open the preview (to the side) without leaving the editor
+- **On-Document Shortcuts**: Click the CodeLens button or gutter icon on each Mermaid block (fenced `mermaid` blocks or `::: mermaid` containers) to open the preview (to the side) without leaving the editor
 - **Side-by-Side View**: Open preview beside your editor for convenient editing
 - **Theme Persistence**: Save your preferred theme as default
 - **Multi-Diagram Support**: Preview every Mermaid block in a document and jump between them with the toolbar navigation controls
@@ -42,8 +42,9 @@ In the preview panel toolbar:
 
 ### Previewing Individual Diagrams
 
-- A **CodeLens button** labeled *Preview Diagram* appears above every mermaid fenced block; clicking it opens a new panel focused solely on that diagram.
-- A subtle **gutter icon** highlights each Mermaid fence, so you can spot diagrams quickly (it's a visual cue only; use the CodeLens to open the preview).
+- A **CodeLens button** labeled *Preview Diagram* appears above every Mermaid block in Markdown (fenced `mermaid` blocks and `::: mermaid` containers); clicking it opens a panel focused on that diagram.
+- In standalone `.mmd`/`.mermaid` files, the CodeLens appears at the top so you can preview or copy quickly.
+- A subtle **gutter icon** highlights Mermaid block starts in Markdown, so you can spot diagrams quickly (it's a visual cue only; use CodeLens to open preview).
 - The editor toolbar/title icon still opens the multi-diagram preview, so you can see every Mermaid block at once.
 
 ![CodeLens and Gutter Icon](https://raw.githubusercontent.com/onlyutkarsh/mermaid-viewer/main/marketplace/preview.webp)
@@ -90,18 +91,20 @@ graph TD
 ````
 ## Commands
 
-- `Mermaid Viewer: Open Preview` - Shows every Mermaid fence from the active Markdown file in the current editor column.
-- `Mermaid Viewer: Open Preview to the Side` - Same multi-diagram preview, but always opens in the column beside the editor for live editing.
-- `Mermaid Viewer: Preview Diagram Here` - Focuses only the Mermaid block at the current cursor (or the CodeLens/gutter target) and keeps that single-diagram panel in sync while you type.
+- `Mermaid Viewer: Open Preview` - Shows Mermaid diagrams from the active Markdown or Mermaid file in the current editor column.
+- `Mermaid Viewer: Open Preview to the Side` - Same preview behavior, but always opens in the column beside the editor for live editing.
+- `Mermaid Viewer: Preview Diagram Here` - Focuses only the Mermaid block at the current cursor (or the CodeLens target) and keeps that single-diagram panel in sync while you type.
 
 ## Requirements
 
 - VSCode 1.85.0 or higher
-- Markdown files with Mermaid code blocks
+- Markdown files with Mermaid code blocks (fenced `mermaid`) or ADO-style Mermaid containers (`::: mermaid ... :::`)
+- Mermaid files (`.mmd`, `.mermaid`)
 
 ## Known Limitations
 
-- Only previews Mermaid diagrams within mermaid fenced code blocks
+- Markdown preview supports Mermaid fenced blocks and ADO-style `::: mermaid` containers.
+- ADO containers must be properly closed with `:::` to be extracted as a diagram.
 
 ## Extension Settings
 

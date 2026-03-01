@@ -3,368 +3,302 @@
 
 import mermaid from 'mermaid';
 
-// Logging helper for webview context
-const LOG_PREFIX = '[Mermaid Loader]';
-const log = {
-	info: (...args: unknown[]) => console.log(LOG_PREFIX, ...args),
-	warn: (...args: unknown[]) => console.warn(LOG_PREFIX, ...args),
-	error: (...args: unknown[]) => console.error(LOG_PREFIX, ...args),
-};
+if (typeof window !== 'undefined') {
+	let currentController: AbortController | undefined;
 
-(async () => {
-	// Only run in webview context (markdown preview)
-	if (typeof window === 'undefined') {
-		return;
+	function getStoredTheme(): 'light' | 'dark' | null {
+		const theme = localStorage.getItem('mermaid-preview-theme');
+		if (theme === 'light' || theme === 'dark') {
+			return theme;
+		}
+		return null;
 	}
 
-	log.info('Starting initialization with bundled mermaid library');
+	function setStoredTheme(theme: 'light' | 'dark'): void {
+		localStorage.setItem('mermaid-preview-theme', theme);
+	}
 
-	try {
-		log.info('Mermaid library loaded successfully');
+	function getEffectiveTheme(): 'light' | 'dark' {
+		const stored = getStoredTheme();
+		if (stored) {
+			return stored;
+		}
+		const vscodeDark =
+			document.body.classList.contains('vscode-dark') ||
+			document.body.classList.contains('vscode-high-contrast');
+		return vscodeDark ? 'dark' : 'light';
+	}
 
-		// Configure mermaid
+	function isDark(): boolean {
+		return getEffectiveTheme() === 'dark';
+	}
+
+	function applyThemeToAll(theme: 'light' | 'dark'): void {
+		setStoredTheme(theme);
+		void init();
+	}
+
+	function createToolbar(): HTMLElement {
+		const toolbar = document.createElement('div');
+		toolbar.className = 'mermaid-toolbar-container';
+		toolbar.innerHTML = `
+			<button class="mermaid-theme-btn" data-theme="light" title="Light theme">☼</button>
+			<button class="mermaid-theme-btn" data-theme="dark" title="Dark theme">☾</button>
+		`;
+
+		const lightBtn = toolbar.querySelector(
+			'[data-theme="light"]',
+		) as HTMLButtonElement;
+		const darkBtn = toolbar.querySelector(
+			'[data-theme="dark"]',
+		) as HTMLButtonElement;
+		const currentTheme: 'light' | 'dark' = getEffectiveTheme();
+		lightBtn.classList.toggle('active', currentTheme === 'light');
+		darkBtn.classList.toggle('active', currentTheme === 'dark');
+		toolbar.classList.toggle('dark-theme', currentTheme === 'dark');
+
+		lightBtn.addEventListener('click', () => applyThemeToAll('light'));
+		darkBtn.addEventListener('click', () => applyThemeToAll('dark'));
+
+		return toolbar;
+	}
+
+	/**
+	 * Finds all .mermaid elements OR falls back when extendMarkdownIt hasn't run.
+	 *
+	 * Two fallbacks:
+	 * 1. <pre><code class="language-mermaid">  — VS Code default for ```mermaid
+	 * 2. :::mermaid blocks rendered as paragraphs — VS Code default for :::mermaid
+	 *    a) single <p> containing ":::mermaid\ncontent\n:::" (no blank lines)
+	 *    b) separate <p>:::mermaid</p> ... <p>:::</p> (blank lines in source)
+	 */
+	function collectMermaidElements(): HTMLElement[] {
+		// Primary: our extendMarkdownIt plugin produced .mermaid elements
+		const primary = Array.from(
+			document.querySelectorAll<HTMLElement>('.mermaid'),
+		);
+		if (primary.length > 0) {
+			console.log(
+				'[ML] found',
+				primary.length,
+				'.mermaid element(s) via plugin',
+			);
+			return primary;
+		}
+
+		const result: HTMLElement[] = [];
+
+		// Fallback 1: <pre><code class="language-mermaid"> — VS Code default for ```mermaid
+		for (const code of Array.from(
+			document.querySelectorAll<HTMLElement>('code[class*="language-mermaid"]'),
+		)) {
+			const pre = code.parentElement;
+			if (!pre || pre.tagName !== 'PRE') {
+				continue;
+			}
+			const source = (code.textContent || '').trim();
+			if (!source) {
+				continue;
+			}
+			const div = document.createElement('div');
+			div.className = 'mermaid';
+			div.textContent = source;
+			div.dataset.mermaidSource = source;
+			pre.replaceWith(div);
+			result.push(div);
+		}
+
+		// Fallback 2: :::mermaid blocks rendered as paragraph(s).
+		// Handles all shapes:
+		// - single paragraph: ":::mermaid\ncontent\n:::"
+		// - opener+content in first paragraph, closer later
+		// - opener-only paragraph with content in following paragraphs
+		const paras = Array.from(document.body.querySelectorAll<HTMLElement>('p'));
+		for (let i = 0; i < paras.length; i++) {
+			const p = paras[i];
+			const text = p.textContent || '';
+
+			// Case 1: full container in one paragraph:
+			// ::: mermaid\n...diagram...\n:::
+			const singleBlock = text.match(
+				/^:::+\s*mermaid\s*\n([\s\S]*?)\n:::+\s*$/i,
+			);
+			if (singleBlock) {
+				const source = (singleBlock[1] || '').trim();
+				if (source) {
+					const div = document.createElement('div');
+					div.className = 'mermaid';
+					div.textContent = source;
+					div.dataset.mermaidSource = source;
+					p.replaceWith(div);
+					result.push(div);
+				}
+				continue;
+			}
+
+			// Detect opener, allowing content to continue in same paragraph.
+			// Examples matched:
+			//   :::mermaid
+			//   ::: mermaid
+			//   :::mermaid\nsequenceDiagram\nautonumber
+			const opener = text.match(/^:::+\s*mermaid\s*(?:\n([\s\S]*))?$/i);
+			if (!opener) {
+				continue;
+			}
+
+			const chunks: string[] = [];
+			const firstChunk = (opener[1] || '').trim();
+			if (firstChunk) {
+				chunks.push(firstChunk);
+			}
+
+			let foundCloser = false;
+			let j = i + 1;
+			while (j < paras.length) {
+				const next = paras[j];
+				const nextTextRaw = next.textContent || '';
+				const nextText = nextTextRaw.trim();
+
+				// Closer-only paragraph
+				if (/^:::+\s*$/.test(nextText)) {
+					next.remove();
+					foundCloser = true;
+					i = j; // skip consumed range
+					break;
+				}
+
+				// Paragraph that ends with closer, with content before it
+				const endsWithCloser = nextTextRaw.match(/^([\s\S]*?)\n:::+\s*$/);
+				if (endsWithCloser) {
+					const beforeCloser = (endsWithCloser[1] || '').trim();
+					if (beforeCloser) {
+						chunks.push(beforeCloser);
+					}
+					next.remove();
+					foundCloser = true;
+					i = j; // skip consumed range
+					break;
+				}
+
+				chunks.push(nextTextRaw.trim());
+				next.remove();
+				j++;
+			}
+
+			const source = chunks
+				.join('\n')
+				.split('\n')
+				.map((line) => line.trimEnd())
+				.filter((line) => !/^:::+\s*$/.test(line.trim()))
+				.join('\n')
+				.trim();
+			if (foundCloser && source) {
+				const div = document.createElement('div');
+				div.className = 'mermaid';
+				div.textContent = source;
+				div.dataset.mermaidSource = source;
+				p.replaceWith(div);
+				result.push(div);
+			} else {
+				// No valid closer found; leave as-is to avoid destroying markdown text.
+			}
+		}
+
+		if (result.length > 0) {
+			console.log('[ML] fallback: converted', result.length, 'element(s)');
+		}
+		return result;
+	}
+
+	async function init(): Promise<void> {
+		currentController?.abort();
+		currentController = new AbortController();
+		const signal = currentController.signal;
+
+		const els = collectMermaidElements();
+		console.log('[ML] init: total elements to render:', els.length);
+
+		if (els.length === 0) {
+			return;
+		}
+
 		mermaid.initialize({
 			startOnLoad: false,
-			theme: 'default',
 			securityLevel: 'loose',
-			flowchart: {
-				useMaxWidth: true,
-			},
-			sequence: {
-				useMaxWidth: true,
-			},
-			gitGraph: {
-				useMaxWidth: true,
-			},
+			theme: (isDark() ? 'dark' : 'default') as any,
 		});
 
-		log.info('Mermaid configured with default settings');
-
-		// Get stored theme preference (light or dark)
-		function getStoredTheme(): string {
-			return localStorage.getItem('mermaid-preview-theme') || 'light';
+		for (const el of els) {
+			el.removeAttribute('data-processed');
 		}
 
-		function setStoredTheme(theme: string) {
-			localStorage.setItem('mermaid-preview-theme', theme);
-		}
-
-		// Create toolbar for a diagram
-		function createToolbar(diagramId: string): HTMLElement {
-			const toolbar = document.createElement('div');
-			toolbar.className = 'mermaid-toolbar-container';
-			toolbar.setAttribute('data-diagram-id', diagramId);
-
-			toolbar.innerHTML = `
-				<button class="mermaid-theme-btn active" data-theme="light" title="Light theme">☼</button>
-				<button class="mermaid-theme-btn" data-theme="dark" title="Dark theme">☾</button>
-			`;
-
-			const lightBtn = toolbar.querySelector(
-				'[data-theme="light"]',
-			) as HTMLButtonElement;
-			const darkBtn = toolbar.querySelector(
-				'[data-theme="dark"]',
-			) as HTMLButtonElement;
-
-			// Set initial active button based on stored theme
-			const currentTheme = getStoredTheme();
-			if (currentTheme === 'dark') {
-				lightBtn.classList.remove('active');
-				darkBtn.classList.add('active');
-				toolbar.classList.add('dark-theme');
+		const renderPromises = els.map(async (el, index) => {
+			const source = (el.dataset.mermaidSource || el.textContent || '').trim();
+			if (!source) {
+				return;
 			}
+			el.dataset.mermaidSource = source;
 
-			// Handle theme switching
-			lightBtn.addEventListener('click', () => {
-				setTheme('light', lightBtn, darkBtn, toolbar);
-			});
+			const id = `mermaid-${Date.now()}-${index}`;
+			try {
+				await mermaid.parse(source);
+				if (signal.aborted) {
+					return;
+				}
 
-			darkBtn.addEventListener('click', () => {
-				setTheme('dark', darkBtn, lightBtn, toolbar);
-			});
+				const result = await mermaid.render(id, source);
+				if (signal.aborted) {
+					return;
+				}
 
-			return toolbar;
-		}
+				const wrapper = document.createElement('div');
+				wrapper.className = 'mermaid-preview-wrapper';
+				wrapper.classList.toggle('dark-theme', isDark());
 
-		// Switch theme for a diagram
-		function setTheme(
-			theme: string,
-			activeBtn: HTMLButtonElement,
-			inactiveBtn: HTMLButtonElement,
-			toolbar: HTMLElement,
-		) {
-			// Update button states
-			activeBtn.classList.add('active');
-			inactiveBtn.classList.remove('active');
+				const content = document.createElement('div');
+				content.className = 'mermaid-preview-content';
+				content.innerHTML = result.svg;
+				wrapper.appendChild(content);
 
-			// Update toolbar theme
-			if (theme === 'dark') {
-				toolbar.classList.add('dark-theme');
-			} else {
-				toolbar.classList.remove('dark-theme');
+				const toolbar = createToolbar();
+				wrapper.appendChild(toolbar);
+
+				const block = document.createElement('div');
+				block.className = 'mermaid-block';
+				block.appendChild(wrapper);
+
+				el.innerHTML = '';
+				el.appendChild(block);
+				result.bindFunctions?.(content);
+			} catch (err) {
+				console.error('[ML] render error on block', index, err);
+				const message =
+					err instanceof Error
+						? err.message
+						: typeof err === 'object' && err !== null && 'str' in err
+							? String((err as { str?: unknown }).str)
+							: String(err);
+				const preview = source.split('\n').slice(0, 4).join('\n');
+				el.innerHTML = `<pre class="mermaid-error" style="color:#c0392b;background:#fdf2f2;border:1px solid #e74c3c;padding:8px;border-radius:4px;font-size:12px;white-space:pre-wrap;">Mermaid render error:\n${message}\n\nSource preview:\n${preview}</pre>`;
 			}
-
-			// Store preference
-			setStoredTheme(theme);
-
-			// Apply theme to ALL diagrams on the page
-			const allWrappers = document.querySelectorAll(
-				'.mermaid-preview-wrapper',
-			) as NodeListOf<HTMLElement>;
-			const allToolbars = document.querySelectorAll(
-				'.mermaid-toolbar-container',
-			) as NodeListOf<HTMLElement>;
-
-			allWrappers.forEach((w) => {
-				if (theme === 'dark') {
-					w.classList.add('dark-theme');
-				} else {
-					w.classList.remove('dark-theme');
-				}
-			});
-
-			allToolbars.forEach((t) => {
-				const lightBtn = t.querySelector(
-					'[data-theme="light"]',
-				) as HTMLButtonElement;
-				const darkBtn = t.querySelector(
-					'[data-theme="dark"]',
-				) as HTMLButtonElement;
-
-				if (lightBtn && darkBtn) {
-					if (theme === 'dark') {
-						lightBtn.classList.remove('active');
-						darkBtn.classList.add('active');
-						t.classList.add('dark-theme');
-					} else {
-						lightBtn.classList.add('active');
-						darkBtn.classList.remove('active');
-						t.classList.remove('dark-theme');
-					}
-				}
-			});
-		}
-
-		// Function to find and render mermaid code blocks
-		async function processMermaidBlocks() {
-			// Find all pre > code blocks with language-mermaid class
-			const codeBlocks = document.querySelectorAll(
-				'pre > code.language-mermaid',
-			);
-
-			log.info(`Found ${codeBlocks.length} standard mermaid code block(s)`);
-			log.info(
-				'Document HTML preview:',
-				document.body.innerHTML.substring(0, 500),
-			);
-
-			let rendered = 0;
-			const currentTheme = getStoredTheme();
-
-			// Process standard ```mermaid blocks
-			for (const block of codeBlocks) {
-				// Skip if already processed
-				if (block.hasAttribute('data-mermaid-processed')) {
-					continue;
-				}
-
-				const code = block.textContent || '';
-				if (!code.trim()) {
-					block.setAttribute('data-mermaid-processed', 'empty');
-					continue;
-				}
-
-				try {
-					block.setAttribute('data-mermaid-processed', 'true');
-
-					const pre = block.parentElement;
-					if (!pre) continue;
-
-					const diagramId = `mermaid-${Math.random().toString(36).substring(7)}`;
-					log.info(`Rendering diagram: ${diagramId}`);
-
-					// Render diagram to SVG
-					const renderedDiagram = await mermaid.render(diagramId, code);
-					const svgContent =
-						typeof renderedDiagram === 'string'
-							? renderedDiagram
-							: (renderedDiagram as any).svg;
-
-					// Create wrapper with light background
-					const wrapper = document.createElement('div');
-					wrapper.className = 'mermaid-preview-wrapper';
-					if (currentTheme === 'dark') {
-						wrapper.classList.add('dark-theme');
-					}
-
-					const content = document.createElement('div');
-					content.className = 'mermaid-preview-content';
-					content.innerHTML = svgContent;
-					wrapper.appendChild(content);
-
-					// Create toolbar
-					const toolbar = createToolbar(diagramId);
-					wrapper.appendChild(toolbar);
-
-					// Create container for wrapper
-					const container = document.createElement('div');
-					container.className = 'mermaid-block';
-					container.appendChild(wrapper);
-
-					// Replace pre element with container
-					pre.replaceWith(container);
-					rendered++;
-
-					log.info(`Successfully rendered diagram: ${diagramId}`);
-				} catch (error) {
-					log.error('Failed to render diagram:', error);
-					block.setAttribute('data-mermaid-processed', 'error');
-				}
-			}
-
-			// Process ADO :::mermaid syntax
-			await processAdoMermaidBlocks();
-
-			log.info(`Total diagrams rendered: ${rendered}`);
-		}
-
-		// Function to find and render ADO-style :::mermaid blocks
-		async function processAdoMermaidBlocks() {
-			const currentTheme = getStoredTheme();
-
-			// Find all text nodes that might contain :::mermaid
-			const walker = document.createTreeWalker(
-				document.body,
-				NodeFilter.SHOW_TEXT,
-				null,
-			);
-
-			const textNodes: Node[] = [];
-			let node: Node | null = walker.nextNode();
-			while (node) {
-				const text = node.textContent || '';
-				// Match both :::mermaid and ::: mermaid (with space)
-				if (text.includes(':::') && /:::\s*mermaid/i.test(text)) {
-					textNodes.push(node);
-				}
-				node = walker.nextNode();
-			}
-
-			for (const textNode of textNodes) {
-				const parentElement = textNode.parentElement;
-				if (
-					!parentElement ||
-					parentElement.hasAttribute('data-mermaid-processed')
-				) {
-					continue;
-				}
-
-				const text = parentElement.textContent || '';
-				// Match both :::mermaid and ::: mermaid (with optional space)
-				const adoPattern = /:::\s*mermaid\s*\r?\n([\s\S]*?)\r?\n:::/gi;
-				const matches = [...text.matchAll(adoPattern)];
-
-				if (matches.length === 0) continue;
-
-				parentElement.setAttribute('data-mermaid-processed', 'true');
-
-				for (const match of matches) {
-					const code = match[1].trim();
-					if (!code) continue;
-
-					try {
-						const diagramId = `mermaid-ado-${Math.random().toString(36).substring(7)}`;
-						log.info(`Rendering ADO diagram: ${diagramId}`);
-
-						// Render diagram to SVG
-						const renderedDiagram = await mermaid.render(diagramId, code);
-						const svgContent =
-							typeof renderedDiagram === 'string'
-								? renderedDiagram
-								: (renderedDiagram as any).svg;
-
-						// Create wrapper with light background
-						const wrapper = document.createElement('div');
-						wrapper.className = 'mermaid-preview-wrapper';
-						if (currentTheme === 'dark') {
-							wrapper.classList.add('dark-theme');
-						}
-
-						const content = document.createElement('div');
-						content.className = 'mermaid-preview-content';
-						content.innerHTML = svgContent;
-						wrapper.appendChild(content);
-
-						// Create toolbar
-						const toolbar = createToolbar(diagramId);
-						wrapper.appendChild(toolbar);
-
-						// Create container for wrapper
-						const container = document.createElement('div');
-						container.className = 'mermaid-block';
-						container.appendChild(wrapper);
-
-						// Replace the parent element's content with the rendered diagram
-						parentElement.innerHTML = '';
-						parentElement.appendChild(container);
-
-						log.info(`Successfully rendered ADO diagram: ${diagramId}`);
-					} catch (error) {
-						log.error('Failed to render ADO diagram:', error);
-					}
-				}
-			}
-		}
-
-		// Wait for DOM to be ready
-		if (document.readyState === 'loading') {
-			await new Promise((resolve) =>
-				document.addEventListener('DOMContentLoaded', resolve),
-			);
-		}
-
-		// Process initial page
-		await processMermaidBlocks();
-
-		// Watch for DOM changes (markdown preview refresh)
-		let debounceTimer: NodeJS.Timeout;
-		const observer = new MutationObserver(() => {
-			clearTimeout(debounceTimer);
-			debounceTimer = setTimeout(async () => {
-				const unprocessed = document.querySelectorAll(
-					'pre > code.language-mermaid:not([data-mermaid-processed])',
-				);
-				if (unprocessed.length > 0) {
-					log.info(
-						`New content detected: ${unprocessed.length} unprocessed block(s)`,
-					);
-					await processMermaidBlocks();
-				}
-			}, 300);
 		});
 
-		observer.observe(document, {
-			childList: true,
-			subtree: true,
-		});
-
-		log.info('Initialization complete - watching for content changes');
-	} catch (error) {
-		log.error('Fatal initialization error:', error);
-
-		// Show error in the page
-		const errorDiv = document.createElement('div');
-		errorDiv.style.padding = '20px';
-		errorDiv.style.color = '#d32f2f';
-		errorDiv.style.fontFamily = 'monospace';
-		errorDiv.style.whiteSpace = 'pre-wrap';
-		errorDiv.style.backgroundColor = '#ffebee';
-		errorDiv.style.borderRadius = '4px';
-		errorDiv.style.margin = '10px';
-		errorDiv.style.fontSize = '12px';
-		const msg = error instanceof Error ? error.stack : String(error);
-		errorDiv.innerHTML = `<strong>Mermaid Loader Error:</strong><br/>${msg}`;
-		document.body.insertAdjacentElement('afterbegin', errorDiv);
+		await Promise.all(renderPromises);
+		if (signal.aborted) {
+			return;
+		}
+		console.log('[ML] done');
 	}
-})();
+
+	window.addEventListener('vscode.markdown.updateContent', () => {
+		void init();
+	});
+
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', () => {
+			void init();
+		});
+	} else {
+		void init();
+	}
+}

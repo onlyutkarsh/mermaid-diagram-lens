@@ -7,19 +7,27 @@ import {
 import { MermaidPreviewPanel, MermaidPreviewSerializer } from './previewPanel';
 import { Logger } from './util/logger';
 
-function findMermaidFenceStartLines(document: vscode.TextDocument): number[] {
+function findMermaidBlockStartLines(document: vscode.TextDocument): number[] {
 	const text = document.getText();
-	const mermaidRegex = /```mermaid[^\S\r\n]*(?:\r?\n)/g;
+	const fencedRegex = /```mermaid[^\S\r\n]*(?:\r?\n)/g;
+	const adoRegex = /:::\s*mermaid[^\S\r\n]*(?:\r?\n)/gm;
 	const lines: number[] = [];
 
-	let match: RegExpExecArray | null = mermaidRegex.exec(text);
+	let match: RegExpExecArray | null = fencedRegex.exec(text);
 	while (match !== null) {
 		const startPos = document.positionAt(match.index);
 		lines.push(startPos.line);
-		match = mermaidRegex.exec(text);
+		match = fencedRegex.exec(text);
 	}
 
-	return lines;
+	match = adoRegex.exec(text);
+	while (match !== null) {
+		const startPos = document.positionAt(match.index);
+		lines.push(startPos.line);
+		match = adoRegex.exec(text);
+	}
+
+	return [...new Set(lines)].sort((a, b) => a - b);
 }
 
 function getMermaidBlockAtLine(
@@ -34,8 +42,8 @@ function getMermaidBlockAtLine(
 	}
 
 	// For markdown files, extract mermaid code blocks
-	const mermaidRegex = /```mermaid[^\S\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)?```/g;
-	let match: RegExpExecArray | null = mermaidRegex.exec(text);
+	const fencedRegex = /```mermaid[^\S\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)?```/g;
+	let match: RegExpExecArray | null = fencedRegex.exec(text);
 
 	while (match !== null) {
 		const startPos = document.positionAt(match.index);
@@ -45,7 +53,21 @@ function getMermaidBlockAtLine(
 			const block = match[1] ?? '';
 			return block.trim();
 		}
-		match = mermaidRegex.exec(text);
+		match = fencedRegex.exec(text);
+	}
+
+	// For markdown files, extract ADO container blocks :::mermaid ... :::
+	const adoRegex = /:::\s*mermaid\s*\r?\n([\s\S]*?)\r?\n:::/g;
+	match = adoRegex.exec(text);
+	while (match !== null) {
+		const startPos = document.positionAt(match.index);
+		const endPos = document.positionAt(match.index + match[0].length);
+
+		if (line >= startPos.line && line <= endPos.line) {
+			const block = match[1] ?? '';
+			return block.trim();
+		}
+		match = adoRegex.exec(text);
 	}
 
 	return undefined;
@@ -78,7 +100,7 @@ class MermaidCodeLensProvider implements vscode.CodeLensProvider {
 		}
 
 		// For markdown files, find mermaid code blocks
-		for (const line of findMermaidFenceStartLines(document)) {
+		for (const line of findMermaidBlockStartLines(document)) {
 			const position = new vscode.Position(line, 0);
 			const range = new vscode.Range(position, position);
 			const command: vscode.Command = {
@@ -126,7 +148,7 @@ class MermaidGutterDecorator implements vscode.Disposable {
 			return;
 		}
 
-		const decorations = findMermaidFenceStartLines(editor.document).map(
+		const decorations = findMermaidBlockStartLines(editor.document).map(
 			(line) => ({
 				range: new vscode.Range(line, 0, line, 0),
 				hoverMessage: 'Mermaid diagram',
@@ -183,6 +205,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		);
 	}
 
+	// Force-refresh any open markdown previews so they pick up our markdown-it
+	// plugin (avoids race where preview opens before extendMarkdownIt is called).
+	void vscode.commands.executeCommand('markdown.preview.refresh');
+
 	// Register webview panel serializer for restoring panels after reload
 	const serializer = new MermaidPreviewSerializer(context.extensionUri);
 	context.subscriptions.push(
@@ -193,8 +219,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	// Only register gutter decorators in workspace context (not UI)
+	let gutterDecorator: MermaidGutterDecorator | undefined;
 	if (!isUIContext) {
-		const gutterDecorator = new MermaidGutterDecorator(context.extensionUri);
+		gutterDecorator = new MermaidGutterDecorator(context.extensionUri);
 		context.subscriptions.push(gutterDecorator);
 		gutterDecorator.update(vscode.window.activeTextEditor);
 	}
@@ -458,7 +485,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Watch for document changes
 	const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
 		(e) => {
-			gutterDecorator.updateForDocument(e.document);
+			gutterDecorator?.updateForDocument(e.document);
 
 			const config = vscode.workspace.getConfiguration('mermaidLivePreview');
 			const autoRefresh = config.get<boolean>('autoRefresh', true);
@@ -478,7 +505,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Watch for active editor changes
 	const changeActiveEditorSubscription =
 		vscode.window.onDidChangeActiveTextEditor((editor) => {
-			gutterDecorator.update(editor);
+			gutterDecorator?.update(editor);
 
 			// Update if it's a markdown or mermaid file
 			if (editor) {
@@ -496,7 +523,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	const visibleEditorsSubscription =
 		vscode.window.onDidChangeVisibleTextEditors((editors) => {
 			for (const editor of editors) {
-				gutterDecorator.update(editor);
+				gutterDecorator?.update(editor);
 			}
 		});
 
@@ -536,6 +563,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	logger.logInfo('Mermaid Viewer extension activated successfully');
+
+	// Return markdown-it API exactly like the reference extension contract.
+	// VS Code markdown preview reads this object from activate() and uses it
+	// to transform markdown before preview scripts run.
+	return {
+		extendMarkdownIt(md: any) {
+			Logger.instance.logInfo(
+				`extendMarkdownIt (activate return) called by VS Code (md=${md ? 'present' : 'missing'})`,
+			);
+			return createMarkdownItPlugin()(md);
+		},
+	};
 }
 
 export function deactivate() {}
