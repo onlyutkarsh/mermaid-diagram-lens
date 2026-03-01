@@ -50,10 +50,7 @@ const log = {
 		}
 
 		// Create toolbar for a diagram
-		function createToolbar(
-			diagramId: string,
-			wrapper: HTMLElement,
-		): HTMLElement {
+		function createToolbar(diagramId: string): HTMLElement {
 			const toolbar = document.createElement('div');
 			toolbar.className = 'mermaid-toolbar-container';
 			toolbar.setAttribute('data-diagram-id', diagramId);
@@ -80,11 +77,11 @@ const log = {
 
 			// Handle theme switching
 			lightBtn.addEventListener('click', () => {
-				setTheme(diagramId, 'light', lightBtn, darkBtn, wrapper, toolbar);
+				setTheme('light', lightBtn, darkBtn, toolbar);
 			});
 
 			darkBtn.addEventListener('click', () => {
-				setTheme(diagramId, 'dark', darkBtn, lightBtn, wrapper, toolbar);
+				setTheme('dark', darkBtn, lightBtn, toolbar);
 			});
 
 			return toolbar;
@@ -92,11 +89,9 @@ const log = {
 
 		// Switch theme for a diagram
 		function setTheme(
-			_diagramId: string,
 			theme: string,
 			activeBtn: HTMLButtonElement,
 			inactiveBtn: HTMLButtonElement,
-			_wrapper: HTMLElement,
 			toolbar: HTMLElement,
 		) {
 			// Update button states
@@ -198,16 +193,19 @@ const log = {
 					if (currentTheme === 'dark') {
 						wrapper.classList.add('dark-theme');
 					}
-					wrapper.innerHTML = svgContent;
+
+					const content = document.createElement('div');
+					content.className = 'mermaid-preview-content';
+					content.innerHTML = svgContent;
+					wrapper.appendChild(content);
 
 					// Create toolbar
-					const toolbar = createToolbar(diagramId, wrapper);
+					const toolbar = createToolbar(diagramId);
+					wrapper.appendChild(toolbar);
 
-					// Create container for toolbar + wrapper
+					// Create container for wrapper
 					const container = document.createElement('div');
 					container.className = 'mermaid-block';
-					container.style.margin = '1.5em 0';
-					container.appendChild(toolbar);
 					container.appendChild(wrapper);
 
 					// Replace pre element with container
@@ -288,16 +286,19 @@ const log = {
 						if (currentTheme === 'dark') {
 							wrapper.classList.add('dark-theme');
 						}
-						wrapper.innerHTML = svgContent;
+
+						const content = document.createElement('div');
+						content.className = 'mermaid-preview-content';
+						content.innerHTML = svgContent;
+						wrapper.appendChild(content);
 
 						// Create toolbar
-						const toolbar = createToolbar(diagramId, wrapper);
+						const toolbar = createToolbar(diagramId);
+						wrapper.appendChild(toolbar);
 
-						// Create container for toolbar + wrapper
+						// Create container for wrapper
 						const container = document.createElement('div');
 						container.className = 'mermaid-block';
-						container.style.margin = '1.5em 0';
-						container.appendChild(toolbar);
 						container.appendChild(wrapper);
 
 						// Replace the parent element's content with the rendered diagram
