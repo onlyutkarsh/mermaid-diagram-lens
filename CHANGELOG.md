@@ -1,3 +1,13 @@
+## [1.4.0](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.3.10...v1.4.0) (2026-03-01)
+
+
+### Features
+
+* Enhance configuration and linting setup, improve theme handling, and add type definitions ([4b63c27](https://github.com/onlyutkarsh/mermaid-viewer/commit/4b63c278a0e06ad7536af0b1cc179af2d4f638f0))
+* Update package.json to support UI context and markdown-it plugin registration ([8a6a2a1](https://github.com/onlyutkarsh/mermaid-viewer/commit/8a6a2a1d7df1db8dae80c2477c53940e5a16e976))
+
+
+
 ## [1.3.10](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.3.9...v1.3.10) (2026-03-01)
 
 
