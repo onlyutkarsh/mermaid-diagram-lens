@@ -9,5 +9,8 @@
   },
   "[json]": {
     "editor.defaultFormatter": "biomejs.biome"
+  },
+  "chat.tools.terminal.autoApprove": {
+    "gh": true
   }
 }
