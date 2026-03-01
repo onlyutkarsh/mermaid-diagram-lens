@@ -197,6 +197,7 @@
     "copy-mermaid": "shx rm -rf out/mermaid && shx mkdir -p out/mermaid/dist/chunks && shx cp node_modules/mermaid/dist/mermaid.esm.min.mjs out/mermaid/dist/ && shx cp -r node_modules/mermaid/dist/chunks/mermaid.esm.min out/mermaid/dist/chunks/",
     "compile": "npm run esbuild",
     "watch": "npm run esbuild-watch",
+    "check": "npm run compile && npm run lint",
     "lint": "biome check src",
     "lint:fix": "biome check --write src",
     "format": "biome format --write src",

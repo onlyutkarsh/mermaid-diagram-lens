@@ -1,4 +1,9 @@
 {
+  "biome.enabled": true,
+  "biome.requireConfiguration": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.biome": "explicit"
+  },
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "biomejs.biome",
   "[typescript]": {
