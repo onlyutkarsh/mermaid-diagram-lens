@@ -56,7 +56,11 @@ export function createMarkdownItPlugin() {
 				}
 
 				const marker = state.src.slice(startPos, startMax).trim();
-				if (marker !== ':::mermaid' && !marker.startsWith(':::mermaid ')) {
+				const normalizedMarker = marker.replace(/\s+/g, ' ');
+				if (
+					normalizedMarker !== ':::mermaid' &&
+					!normalizedMarker.startsWith(':::mermaid ')
+				) {
 					return false;
 				}
 

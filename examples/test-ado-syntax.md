@@ -16,6 +16,14 @@ graph TD
     B --> C[Should Work Too]
 :::
 
+## Azure DevOps Syntax (Container With Space)
+
+::: mermaid
+graph TD
+    A[ADO] --> B[Container With Space]
+    B --> C[Should Work Too]
+:::
+
 ## Another ADO Example
 
 :::mermaid
