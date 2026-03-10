@@ -977,10 +977,8 @@ export class MermaidPreviewPanel {
 			const codiconStylesUri = webview.asWebviewUri(
 				vscode.Uri.joinPath(
 					this._extensionUri,
-					'node_modules',
-					'@vscode',
+					'out',
 					'codicons',
-					'dist',
 					'codicon.css',
 				),
 			);
@@ -2060,6 +2058,20 @@ export class MermaidPreviewPanel {
                 }
 
                 const key = event.key.toLowerCase();
+                const code = event.code;
+
+                // Support numpad keys across layouts (NumpadAdd/NumpadSubtract)
+                if (code === 'NumpadAdd') {
+                    event.preventDefault();
+                    zoomIn();
+                    return;
+                }
+
+                if (code === 'NumpadSubtract') {
+                    event.preventDefault();
+                    zoomOut();
+                    return;
+                }
 
                 switch (key) {
                     // Zoom in with + or =
@@ -2194,6 +2206,11 @@ export class MermaidPreviewPanel {
             display: flex;
             flex-direction: column;
             height: 100vh;
+            --preview-toolbar-bg: var(--vscode-editorWidget-background);
+            --preview-toolbar-border: var(--vscode-editorWidget-border);
+            --preview-toolbar-fg: var(--vscode-editor-foreground);
+            --preview-toolbar-hover-bg: color-mix(in srgb, var(--vscode-button-background) 20%, transparent);
+            --preview-toolbar-hover-border: color-mix(in srgb, var(--vscode-button-background) 45%, transparent);
         }
 
         body.appearance-match {
@@ -2217,6 +2234,11 @@ export class MermaidPreviewPanel {
             --vscode-errorForeground: #a1260d;
             --vscode-inputValidation-errorBackground: #f8d7da;
             --vscode-inputValidation-errorBorder: #f5c6cb;
+            --preview-toolbar-bg: #f3f3f3;
+            --preview-toolbar-border: #dcdcdc;
+            --preview-toolbar-fg: #1f1f1f;
+            --preview-toolbar-hover-bg: rgba(0, 103, 192, 0.14);
+            --preview-toolbar-hover-border: rgba(0, 103, 192, 0.32);
         }
 
         body.appearance-dark {
@@ -2236,17 +2258,22 @@ export class MermaidPreviewPanel {
             --vscode-errorForeground: #f48771;
             --vscode-inputValidation-errorBackground: #5a1d1d;
             --vscode-inputValidation-errorBorder: #be1100;
+            --preview-toolbar-bg: #2d2d2d;
+            --preview-toolbar-border: #404040;
+            --preview-toolbar-fg: #e0e0e0;
+            --preview-toolbar-hover-bg: rgba(255, 255, 255, 0.1);
+            --preview-toolbar-hover-border: rgba(255, 255, 255, 0.2);
         }
 
         .toolbar {
-            background-color: #2d2d2d;
-            border-bottom: 1px solid #404040;
+            background-color: var(--preview-toolbar-bg);
+            border-bottom: 1px solid var(--preview-toolbar-border);
             padding: 10px 16px;
             display: flex;
             align-items: center;
             gap: 12px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-            color: #e0e0e0;
+            color: var(--preview-toolbar-fg);
             z-index: 2;
         }
 
@@ -2255,7 +2282,7 @@ export class MermaidPreviewPanel {
             align-items: center;
             gap: 8px;
             padding: 0 8px;
-            border-right: 1px solid #404040;
+            border-right: 1px solid var(--preview-toolbar-border);
         }
 
         .toolbar-group:last-child {
@@ -2264,7 +2291,7 @@ export class MermaidPreviewPanel {
 
         .toolbar button {
             background-color: transparent;
-            color: #e0e0e0;
+            color: var(--preview-toolbar-fg);
             border: 1px solid transparent;
             padding: 6px 12px;
             border-radius: 4px;
@@ -2275,12 +2302,12 @@ export class MermaidPreviewPanel {
 
 
         .toolbar button:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.2);
+            background-color: var(--preview-toolbar-hover-bg);
+            border-color: var(--preview-toolbar-hover-border);
         }
 
         .toolbar .codicon {
-            font-size: 20px;
+            font-size: 18px;
             line-height: 1;
         }
 
@@ -2294,7 +2321,7 @@ export class MermaidPreviewPanel {
             text-align: center;
             font-size: 12px;
             font-weight: 600;
-            color: #e0e0e0;
+            color: var(--preview-toolbar-fg);
         }
 
         #diagram-viewport {
@@ -2390,7 +2417,7 @@ export class MermaidPreviewPanel {
 
         .action-btn {
             background-color: transparent;
-            color: #e0e0e0;
+            color: var(--preview-toolbar-fg);
             border: 1px solid transparent;
             padding: 6px 12px;
             border-radius: 4px;
@@ -2443,7 +2470,7 @@ export class MermaidPreviewPanel {
             font-weight: 600;
             min-width: 140px;
             text-align: center;
-            color: #e0e0e0;
+            color: var(--preview-toolbar-fg);
         }
 
         .keyboard-shortcuts-hint {
@@ -2460,7 +2487,7 @@ export class MermaidPreviewPanel {
             display: inline-block;
             padding: 0 4px;
             transition: opacity 0.2s ease, transform 0.1s ease;
-            color: #e0e0e0;
+            color: var(--preview-toolbar-fg);
         }
 
         .shortcuts-icon:hover {
