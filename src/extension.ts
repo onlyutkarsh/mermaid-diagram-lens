@@ -236,6 +236,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	const configChangeListener = vscode.workspace.onDidChangeConfiguration(
 		(event) => {
 			if (event.affectsConfiguration('mermaidLivePreview.previewAppearance')) {
+				if (MermaidPreviewPanel.consumeSuppressedAppearanceRefresh()) {
+					return;
+				}
 				MermaidPreviewPanel.forEachPanel((panel) => panel.refreshAppearance());
 			}
 		},

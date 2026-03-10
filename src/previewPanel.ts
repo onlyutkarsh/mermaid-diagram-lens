@@ -25,6 +25,7 @@ type WebviewState = {
 export class MermaidPreviewPanel {
 	public static readonly viewType = 'mermaidLivePreview';
 	private static readonly _panels = new Set<MermaidPreviewPanel>();
+	private static _suppressNextAppearanceRefresh = false;
 	private readonly _panel: vscode.WebviewPanel;
 	private readonly _extensionUri: vscode.Uri;
 	private readonly _logger: Logger;
@@ -52,6 +53,19 @@ export class MermaidPreviewPanel {
 
 	public static hasOpenPanels(): boolean {
 		return MermaidPreviewPanel._panels.size > 0;
+	}
+
+	public static suppressNextAppearanceRefresh(): void {
+		MermaidPreviewPanel._suppressNextAppearanceRefresh = true;
+	}
+
+	public static consumeSuppressedAppearanceRefresh(): boolean {
+		if (!MermaidPreviewPanel._suppressNextAppearanceRefresh) {
+			return false;
+		}
+
+		MermaidPreviewPanel._suppressNextAppearanceRefresh = false;
+		return true;
 	}
 
 	public static async revive(
@@ -520,7 +534,7 @@ export class MermaidPreviewPanel {
 
 	private async _handleThemeChange(theme: string) {
 		try {
-			// Persist the selection and update the preview
+			// Persist the selection. The webview already re-renders immediately.
 			const config = vscode.workspace.getConfiguration('mermaidLivePreview');
 			await config.update(
 				'useVSCodeTheme',
@@ -528,7 +542,6 @@ export class MermaidPreviewPanel {
 				vscode.ConfigurationTarget.Global,
 			);
 			await config.update('theme', theme, vscode.ConfigurationTarget.Global);
-			this._render(theme);
 		} catch (error) {
 			this._logger.logError(
 				'Failed to update theme configuration',
@@ -557,12 +570,12 @@ export class MermaidPreviewPanel {
 	private async _handleAppearanceChange(appearance: PreviewAppearance) {
 		try {
 			const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+			MermaidPreviewPanel.suppressNextAppearanceRefresh();
 			await config.update(
 				'previewAppearance',
 				appearance,
 				vscode.ConfigurationTarget.Global,
 			);
-			this.refreshAppearance();
 		} catch (error) {
 			this._logger.logError(
 				'Failed to update appearance configuration',
@@ -637,6 +650,7 @@ export class MermaidPreviewPanel {
 			// Only SVG uses this path - PNG/JPG are copied directly in webview
 			if (format === 'svg') {
 				await vscode.env.clipboard.writeText(data);
+				void this._panel.webview.postMessage({ command: 'copyCompleted' });
 				vscode.window.showInformationMessage('SVG copied to clipboard');
 				this._logger.logInfo('Diagram copied to clipboard', { format });
 			}
@@ -1810,6 +1824,7 @@ export class MermaidPreviewPanel {
                 const clipboardResult = await copyImageToClipboard(svgEl, format, scale);
 
                 if (clipboardResult.kind === 'success') {
+                    closeAllDropdowns();
                     vscode.postMessage({
                         command: 'copySuccess',
                         format,
@@ -1972,6 +1987,11 @@ export class MermaidPreviewPanel {
             if (message.command === 'updateState') {
                 panelState = message.state;
                 saveInteractionState();
+                return;
+            }
+
+            if (message.command === 'copyCompleted') {
+                closeAllDropdowns();
             }
         });
 
