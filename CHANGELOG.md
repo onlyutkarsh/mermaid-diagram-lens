@@ -1,3 +1,12 @@
+## [1.4.2](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.1...v1.4.2) (2026-03-10)
+
+
+### Features
+
+* Add memory keeper prompt and enhance preview panel with codicon support and zoom functionality ([c093f67](https://github.com/onlyutkarsh/mermaid-viewer/commit/c093f67bed9d70fcf7a220d39748bc5aa9d93a34))
+
+
+
 ## [1.4.1](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.0...v1.4.1) (2026-03-01)
 
 
