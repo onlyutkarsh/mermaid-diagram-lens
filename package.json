@@ -220,7 +220,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@vscode/codicons": "^0.0.36",
+    "@vscode/codicons": "^0.0.44",
     "mermaid": "^11.12.2"
   },
   "overrides": {
