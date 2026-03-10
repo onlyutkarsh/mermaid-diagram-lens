@@ -149,3 +149,25 @@ const showPreviewCommand = vscode.commands.registerCommand('ext.showPreview', ()
 Accepting unrelated file types or mixing unsupported-language handling deep in command logic.
 
 **Pattern:** Explicitly allow only the intended set (`markdown`, `mermaid`) and fail fast with one consistent message.
+
+## Webview Codicon Packaging Pattern
+
+When a webview uses Codicons, bundle Codicon assets into extension output and load from `out/` paths.
+
+1. Copy `codicon.css` and `codicon.ttf` into `out/codicons` as part of `compile` and `vscode:prepublish` scripts.
+2. Resolve webview stylesheet URI from `out/codicons/codicon.css`.
+3. Keep `.vscodeignore` free to exclude `node_modules`; runtime webview assets should not depend on `node_modules`.
+
+**Why this matters:** packaged `.vsix` files usually exclude `node_modules`, so codicon glyphs can disappear if the webview points to source dependency paths.
+
+## Discoverable Hover Controls Pattern
+
+For diagram viewers with immersive canvas interaction, prefer hidden controls with explicit discoverability:
+
+1. Place a floating controls panel in the bottom-right corner.
+2. Reveal it from a bounded hotspot (`.hover-hotspot`) instead of full-canvas hover.
+3. Keep a subtle persistent hint (`.hover-presence-hint`) to signal controls are available.
+4. Exclude controls/hotspot from pan start logic so click interactions stay reliable.
+5. Use theme tokens for badge text (`var(--vscode-editor-foreground)`) instead of hard-coded light colors.
+
+**Why this matters:** this preserves clean diagram focus while keeping controls discoverable, accessible, and readable in both light and dark themes.
