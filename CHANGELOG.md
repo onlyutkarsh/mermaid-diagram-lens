@@ -1,3 +1,12 @@
+## [1.4.3](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.2...v1.4.3) (2026-03-10)
+
+
+### Features
+
+* Implement suppression of appearance refresh in MermaidPreviewPanel ([38c974b](https://github.com/onlyutkarsh/mermaid-viewer/commit/38c974b70b4fe9d02572b1aa63f59581b308dd53))
+
+
+
 ## [1.4.2](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.1...v1.4.2) (2026-03-10)
 
 
