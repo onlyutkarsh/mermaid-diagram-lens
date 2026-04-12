@@ -38,13 +38,158 @@ if (typeof window !== 'undefined') {
 		void init();
 	}
 
+	function openFullscreenOverlay(
+		svg: SVGElement,
+		isDarkTheme: boolean,
+	): void {
+		const overlay = document.createElement('div');
+		overlay.className = 'mermaid-fullscreen-overlay';
+		overlay.setAttribute('tabindex', '-1');
+
+		const body = document.createElement('div');
+		body.className = 'mermaid-fullscreen-body';
+
+		const uid = `fs-${Date.now()}`;
+		const clone = svg.cloneNode(true) as SVGElement;
+		clone.querySelectorAll('[id]').forEach((el) => {
+			const oldId = el.id;
+			const newId = `${oldId}-${uid}`;
+			el.id = newId;
+			clone
+				.querySelectorAll(
+					`[href="#${oldId}"], [xlink\\:href="#${oldId}"]`,
+				)
+				.forEach((ref) => {
+					if (ref.hasAttribute('href')) {
+						ref.setAttribute('href', `#${newId}`);
+					}
+					if (ref.hasAttributeNS('http://www.w3.org/1999/xlink', 'href')) {
+						ref.setAttributeNS(
+							'http://www.w3.org/1999/xlink',
+							'xlink:href',
+							`#${newId}`,
+						);
+					}
+				});
+		});
+		body.appendChild(clone);
+
+		const closeBtn = document.createElement('button');
+		closeBtn.className = 'mermaid-fullscreen-close';
+		closeBtn.textContent = '✕';
+		closeBtn.title = 'Close (Esc)';
+
+		overlay.appendChild(closeBtn);
+		overlay.appendChild(body);
+
+		if (isDarkTheme) {
+			overlay.classList.add('dark-theme');
+		}
+
+		document.body.appendChild(overlay);
+		overlay.focus();
+
+		let zoom = 1;
+		let tx = 0;
+		let ty = 0;
+		let dragging = false;
+		let startX = 0;
+		let startY = 0;
+
+		function applyTransform(): void {
+			body.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+		}
+
+		overlay.addEventListener(
+			'wheel',
+			(ev: WheelEvent) => {
+				ev.preventDefault();
+				if (ev.ctrlKey) {
+					const delta = ev.deltaY > 0 ? -0.1 : 0.1;
+					zoom = Math.max(0.2, Math.min(10, zoom + delta));
+					applyTransform();
+				} else {
+					const multiplier =
+						ev.deltaMode === 1
+							? 16
+							: ev.deltaMode === 2
+								? window.innerHeight
+								: 1;
+					tx -= ev.deltaX * multiplier;
+					ty -= ev.deltaY * multiplier;
+					applyTransform();
+				}
+			},
+			{ passive: false },
+		);
+
+		body.addEventListener('mousedown', (ev: MouseEvent) => {
+			if (ev.button === 0) {
+				dragging = true;
+				startX = ev.clientX - tx;
+				startY = ev.clientY - ty;
+				ev.preventDefault();
+			}
+		});
+
+		const onMouseMove = (ev: MouseEvent): void => {
+			if (dragging) {
+				tx = ev.clientX - startX;
+				ty = ev.clientY - startY;
+				applyTransform();
+			}
+		};
+
+		const onMouseUp = (): void => {
+			dragging = false;
+		};
+
+		window.addEventListener('mousemove', onMouseMove);
+		window.addEventListener('mouseup', onMouseUp);
+
+		function removeOverlay(): void {
+			overlay.remove();
+			window.removeEventListener('mousemove', onMouseMove);
+			window.removeEventListener('mouseup', onMouseUp);
+			document.removeEventListener('keydown', onEsc);
+		}
+
+		function onEsc(ev: KeyboardEvent): void {
+			if (ev.key === 'Escape') removeOverlay();
+		}
+
+		closeBtn.addEventListener('click', removeOverlay);
+		overlay.addEventListener('click', (ev: MouseEvent) => {
+			if (ev.target === overlay) removeOverlay();
+		});
+		document.addEventListener('keydown', onEsc);
+	}
+
 	function createToolbar(): HTMLElement {
 		const toolbar = document.createElement('div');
 		toolbar.className = 'mermaid-toolbar-container';
 		toolbar.innerHTML = `
 			<button class="mermaid-theme-btn" data-theme="light" title="Light theme">☼</button>
 			<button class="mermaid-theme-btn" data-theme="dark" title="Dark theme">☾</button>
+			<button class="mermaid-theme-btn mermaid-fullscreen-btn" title="Fullscreen">⤢</button>
 		`;
+
+		const fullscreenBtn = toolbar.querySelector(
+			'.mermaid-fullscreen-btn',
+		) as HTMLButtonElement;
+		fullscreenBtn.addEventListener('click', function () {
+			if (document.querySelector('.mermaid-fullscreen-overlay')) return;
+
+			const wrapper = this.closest('.mermaid-preview-wrapper');
+			if (!wrapper) return;
+			const svg = wrapper.querySelector('.mermaid-preview-content svg');
+			if (!svg) return;
+
+			openFullscreenOverlay(
+				svg as SVGElement,
+				wrapper.classList.contains('dark-theme'),
+			);
+		});
 
 		const lightBtn = toolbar.querySelector(
 			'[data-theme="light"]',
