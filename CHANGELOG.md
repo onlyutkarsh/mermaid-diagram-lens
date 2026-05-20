@@ -1,3 +1,13 @@
+## [1.4.4](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.3...v1.4.4) (2026-05-20)
+
+
+### Features
+
+* Add fullscreen mode for mermaid diagrams in markdown preview ([450b4dc](https://github.com/onlyutkarsh/mermaid-viewer/commit/450b4dc138233516887fe24964466e83bbef7c72))
+* Add functionality to copy Mermaid code without frontmatter ([6085746](https://github.com/onlyutkarsh/mermaid-viewer/commit/608574692878b34a342d54e299310e9b2cec4ba2))
+
+
+
 ## [1.4.3](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.2...v1.4.3) (2026-03-10)
 
 
