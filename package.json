@@ -88,7 +88,11 @@
       },
       {
         "command": "mermaidLivePreview.copyDiagramCode",
-        "title": "Mermaid Viewer: Copy Diagram Code"
+        "title": "Mermaid Viewer: Copy"
+      },
+      {
+        "command": "mermaidLivePreview.copyDiagramCodeWithoutFrontMatter",
+        "title": "Mermaid Viewer: Copy without frontmatter"
       }
     ],
     "menus": {
