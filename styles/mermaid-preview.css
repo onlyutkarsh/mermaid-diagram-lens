@@ -67,6 +67,20 @@
 	color: #64b5f6;
 }
 
+/* Fullscreen button */
+.mermaid-fullscreen-btn {
+	text-decoration: none;
+	font-size: 18px;
+	color: #e0e0e0;
+	border-left: 1px solid #404040;
+	margin-left: 2px;
+	padding-left: 6px;
+}
+
+.mermaid-fullscreen-btn:hover {
+	color: #64b5f6;
+}
+
 /* Light background wrapper for rendered diagrams */
 .mermaid-preview-wrapper {
 	position: relative;
@@ -138,9 +152,81 @@
 	}
 }
 
+/* Fullscreen overlay */
+.mermaid-fullscreen-overlay {
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #ffffff;
+	z-index: 99999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: default;
+	overflow: hidden;
+	outline: none;
+}
+
+.mermaid-fullscreen-overlay.dark-theme {
+	background-color: #1e1e1e;
+}
+
+.mermaid-fullscreen-body {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	cursor: grab;
+	transform-origin: center center;
+}
+
+.mermaid-fullscreen-body:active {
+	cursor: grabbing;
+}
+
+.mermaid-fullscreen-body svg {
+	width: 100%;
+	height: auto;
+}
+
+.mermaid-fullscreen-close {
+	position: absolute;
+	top: 12px;
+	right: 16px;
+	z-index: 100000;
+	background: rgba(0, 0, 0, 0.08);
+	border: 1px solid rgba(0, 0, 0, 0.15);
+	border-radius: 50%;
+	width: 36px;
+	height: 36px;
+	font-size: 18px;
+	color: #333;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.2s;
+}
+
+.mermaid-fullscreen-close:hover {
+	background: rgba(0, 0, 0, 0.15);
+}
+
+.mermaid-fullscreen-overlay.dark-theme .mermaid-fullscreen-close {
+	background: rgba(255, 255, 255, 0.12);
+	border-color: rgba(255, 255, 255, 0.2);
+	color: #e0e0e0;
+}
+
+.mermaid-fullscreen-overlay.dark-theme .mermaid-fullscreen-close:hover {
+	background: rgba(255, 255, 255, 0.25);
+}
+
 /* Print styles */
 @media print {
-	.mermaid-toolbar-container {
+	.mermaid-toolbar-container,
+	.mermaid-fullscreen-overlay {
 		display: none;
 	}
 
