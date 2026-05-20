@@ -38,10 +38,7 @@ if (typeof window !== 'undefined') {
 		void init();
 	}
 
-	function openFullscreenOverlay(
-		svg: SVGElement,
-		isDarkTheme: boolean,
-	): void {
+	function openFullscreenOverlay(svg: SVGElement, isDarkTheme: boolean): void {
 		const overlay = document.createElement('div');
 		overlay.className = 'mermaid-fullscreen-overlay';
 		overlay.setAttribute('tabindex', '-1');
@@ -56,9 +53,7 @@ if (typeof window !== 'undefined') {
 			const newId = `${oldId}-${uid}`;
 			el.id = newId;
 			clone
-				.querySelectorAll(
-					`[href="#${oldId}"], [xlink\\:href="#${oldId}"]`,
-				)
+				.querySelectorAll(`[href="#${oldId}"], [xlink\\:href="#${oldId}"]`)
 				.forEach((ref) => {
 					if (ref.hasAttribute('href')) {
 						ref.setAttribute('href', `#${newId}`);
