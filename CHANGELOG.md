@@ -1,3 +1,12 @@
+## [1.4.5](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.4...v1.4.5) (2026-05-21)
+
+
+### Features
+
+* Add functionality to copy Mermaid diagram code with customizable wrapper and improve Markdown preview isolation ([46d602c](https://github.com/onlyutkarsh/mermaid-viewer/commit/46d602c7f32250c15ab356a95669c30809e5dfb1))
+
+
+
 ## [1.4.4](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.3...v1.4.4) (2026-05-20)
 
 
