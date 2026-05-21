@@ -6,6 +6,7 @@
 import type * as vscode from 'vscode';
 
 const mermaidLanguageId = 'mermaid';
+const mermaidPreviewClass = 'mermaid-live-preview';
 const containerTokenName = 'mermaidContainer';
 
 type HighlightFn = (code: string, lang: string, attrs: string) => string;
@@ -78,6 +79,13 @@ function preProcess(source: string): string {
 		.trimStart();
 }
 
+function preProcessAttribute(source: string): string {
+	return preProcess(source)
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;')
+		.replace(/\n/g, '&#10;');
+}
+
 /**
  * Creates a markdown-it plugin function for rendering mermaid blocks.
  * Output format matches vscode-markdown-mermaid so mermaidLoader.ts
@@ -89,7 +97,7 @@ export function createMarkdownItPlugin() {
 		const highlight = md.options.highlight;
 		md.options.highlight = (code: string, lang: string, attrs: string) => {
 			if (lang && /^mermaid\b/i.test(lang.trim())) {
-				return `<pre class="${mermaidLanguageId}" style="all: unset;">${preProcess(code)}</pre>`;
+				return `<pre class="${mermaidPreviewClass}" data-mermaid-source="${preProcessAttribute(code)}" style="all: unset;">${preProcess(code)}</pre>`;
 			}
 			return highlight?.(code, lang, attrs) ?? code;
 		};
@@ -230,7 +238,7 @@ export function createMarkdownItPlugin() {
 			idx: number,
 		) => {
 			const src = tokens[idx].content;
-			return `<div class="${mermaidLanguageId}">${preProcess(src)}</div>`;
+			return `<div class="${mermaidPreviewClass}" data-mermaid-source="${preProcessAttribute(src)}">${preProcess(src)}</div>`;
 		};
 
 		return md;

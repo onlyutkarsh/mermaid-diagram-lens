@@ -171,3 +171,44 @@ For diagram viewers with immersive canvas interaction, prefer hidden controls wi
 5. Use theme tokens for badge text (`var(--vscode-editor-foreground)`) instead of hard-coded light colors.
 
 **Why this matters:** this preserves clean diagram focus while keeping controls discoverable, accessible, and readable in both light and dark themes.
+
+## Markdown Preview Class Name Isolation (Critical)
+
+When rendering diagrams in VS Code markdown preview via a markdown-it plugin, use an **extension-owned class name**, not standard names like `mermaid`. VS Code's native Mermaid renderer runs in parallel and will target standard class names, potentially causing rendering conflicts.
+
+### The Problem
+
+If your markdown-it plugin outputs `<pre class="mermaid">` or similar standard names:
+
+1. Your loader processes and renders the elements
+2. VS Code's built-in Mermaid processor (if enabled) also targets those same elements
+3. On preview refresh, the DOM may be recreated with missing source attributes
+4. The native processor then tries to re-parse `el.textContent`, which now contains rendered SVG/CSS instead of Mermaid source code
+5. Result: Parse errors like `"No diagram type detected matching given configuration for text: [rendered SVG...]"`
+
+### The Solution
+
+1. **Use extension-owned class names**: Change plugin output from `class="mermaid"` to `class="mermaid-live-preview"` (or similar prefixed name)
+2. **Update loader selectors**: Change loader queries from `.mermaid` to `.mermaid-live-preview`
+3. **Embed source durably**: Store Mermaid source in a `data-mermaid-source` attribute (not just `textContent`)
+4. **Guard source extraction**: Loader should prefer the data attribute and validate source isn't rendered content
+
+### Example Implementation
+
+**markdown-it plugin:**
+```typescript
+const mermaidPreviewClass = 'mermaid-live-preview';  // Extension-owned class
+// ... in fence render function:
+return `<pre class="${mermaidPreviewClass}" data-mermaid-source="${encodedSource}" style="all: unset;">...</pre>`;
+```
+
+**Loader script:**
+```typescript
+const els = document.querySelectorAll('.mermaid-live-preview');  // Extension class only
+els.forEach(el => {
+	const source = (el.dataset.mermaidSource || '').trim();  // Prefer data attribute
+	// ... validate and render
+});
+```
+
+**Why this matters:** Standard class names risk collision with VS Code's native or user-installed processors. Extension-owned names guarantee isolation and prevent silent rendering conflicts that are extremely hard to debug.

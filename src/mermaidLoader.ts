@@ -3,6 +3,8 @@
 
 import mermaid from 'mermaid';
 
+const MERMAID_PREVIEW_CLASS = 'mermaid-live-preview';
+
 if (typeof window !== 'undefined') {
 	let currentController: AbortController | undefined;
 
@@ -204,7 +206,7 @@ if (typeof window !== 'undefined') {
 	}
 
 	/**
-	 * Finds all .mermaid elements OR falls back when extendMarkdownIt hasn't run.
+	 * Finds all extension-owned Mermaid elements OR falls back when extendMarkdownIt hasn't run.
 	 *
 	 * Two fallbacks:
 	 * 1. <pre><code class="language-mermaid">  — VS Code default for ```mermaid
@@ -213,15 +215,15 @@ if (typeof window !== 'undefined') {
 	 *    b) separate <p>:::mermaid</p> ... <p>:::</p> (blank lines in source)
 	 */
 	function collectMermaidElements(): HTMLElement[] {
-		// Primary: our extendMarkdownIt plugin produced .mermaid elements
+		// Primary: our extendMarkdownIt plugin produced extension-owned elements
 		const primary = Array.from(
-			document.querySelectorAll<HTMLElement>('.mermaid'),
+			document.querySelectorAll<HTMLElement>(`.${MERMAID_PREVIEW_CLASS}`),
 		);
 		if (primary.length > 0) {
 			console.log(
 				'[ML] found',
 				primary.length,
-				'.mermaid element(s) via plugin',
+				`${MERMAID_PREVIEW_CLASS} element(s) via plugin`,
 			);
 			return primary;
 		}
@@ -241,7 +243,7 @@ if (typeof window !== 'undefined') {
 				continue;
 			}
 			const div = document.createElement('div');
-			div.className = 'mermaid';
+			div.className = MERMAID_PREVIEW_CLASS;
 			div.textContent = source;
 			div.dataset.mermaidSource = source;
 			pre.replaceWith(div);
@@ -267,7 +269,7 @@ if (typeof window !== 'undefined') {
 				const source = (singleBlock[1] || '').trim();
 				if (source) {
 					const div = document.createElement('div');
-					div.className = 'mermaid';
+					div.className = MERMAID_PREVIEW_CLASS;
 					div.textContent = source;
 					div.dataset.mermaidSource = source;
 					p.replaceWith(div);
@@ -334,7 +336,7 @@ if (typeof window !== 'undefined') {
 				.trim();
 			if (foundCloser && source) {
 				const div = document.createElement('div');
-				div.className = 'mermaid';
+				div.className = MERMAID_PREVIEW_CLASS;
 				div.textContent = source;
 				div.dataset.mermaidSource = source;
 				p.replaceWith(div);
@@ -368,13 +370,56 @@ if (typeof window !== 'undefined') {
 			theme: isDark() ? 'dark' : 'default',
 		});
 
-		for (const el of els) {
-			el.removeAttribute('data-processed');
-		}
-
 		const renderPromises = els.map(async (el, index) => {
-			const source = (el.dataset.mermaidSource || el.textContent || '').trim();
+			// Mark as processed early so any Mermaid auto-run path skips this node.
+			el.setAttribute('data-processed', 'true');
+
+			const isAlreadyRendered = el.querySelector('.mermaid-block') !== null;
+			const sourceFromDataset = (el.dataset.mermaidSource || '').trim();
+			const sourceFromText = (el.textContent || '').trim();
+			const source = (
+				sourceFromDataset ||
+				(!isAlreadyRendered ? sourceFromText : '') ||
+				''
+			).trim();
+
+			console.log('[ML] source selection', {
+				index,
+				isAlreadyRendered,
+				hasDatasetSource: sourceFromDataset.length > 0,
+				datasetLength: sourceFromDataset.length,
+				textLength: sourceFromText.length,
+				using: sourceFromDataset
+					? 'dataset'
+					: !isAlreadyRendered && sourceFromText
+						? 'textContent'
+						: 'none',
+				hasRenderedBlock: el.querySelector('.mermaid-block') !== null,
+				className: el.className,
+			});
 			if (!source) {
+				console.log('[ML] skip empty source', { index, isAlreadyRendered });
+				return;
+			}
+
+			// Guard against re-parsing rendered SVG/CSS content when source attrs are missing.
+			// This can happen during markdown preview refresh cycles where DOM attributes
+			// are recreated and textContent contains rendered output instead of Mermaid code.
+			if (
+				source.startsWith('#mermaid-') ||
+				source.includes('@keyframes') ||
+				source.includes('.edge-animation-slow')
+			) {
+				console.warn('[ML] skipping non-source content for block', {
+					index,
+					isAlreadyRendered,
+					hasDatasetSource: sourceFromDataset.length > 0,
+					sourcePreview: source
+						.split('\n')
+						.slice(0, 2)
+						.join('\n')
+						.slice(0, 180),
+				});
 				return;
 			}
 			el.dataset.mermaidSource = source;
@@ -409,6 +454,7 @@ if (typeof window !== 'undefined') {
 
 				el.innerHTML = '';
 				el.appendChild(block);
+				el.setAttribute('data-processed', 'true');
 				result.bindFunctions?.(content);
 			} catch (err) {
 				console.error('[ML] render error on block', index, err);

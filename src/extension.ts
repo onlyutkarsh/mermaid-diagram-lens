@@ -125,7 +125,7 @@ class MermaidCodeLensProvider implements vscode.CodeLensProvider {
 			const range = new vscode.Range(position, position);
 
 			const previewCommand: vscode.Command = {
-				title: 'Preview Diagram',
+				title: 'Preview',
 				command: 'mermaidLivePreview.showPreviewToSide',
 				arguments: [],
 			};
@@ -136,15 +136,8 @@ class MermaidCodeLensProvider implements vscode.CodeLensProvider {
 				arguments: [document.uri],
 			};
 
-			const copyWithoutFrontMatterCommand: vscode.Command = {
-				title: 'Copy without frontmatter',
-				command: 'mermaidLivePreview.copyDiagramCodeWithoutFrontMatter',
-				arguments: [document.uri],
-			};
-
 			lenses.push(new vscode.CodeLens(range, previewCommand));
 			lenses.push(new vscode.CodeLens(range, copyCommand));
-			lenses.push(new vscode.CodeLens(range, copyWithoutFrontMatterCommand));
 			return lenses;
 		}
 
@@ -153,7 +146,7 @@ class MermaidCodeLensProvider implements vscode.CodeLensProvider {
 			const position = new vscode.Position(line, 0);
 			const range = new vscode.Range(position, position);
 			const command: vscode.Command = {
-				title: 'Preview Diagram',
+				title: 'Preview',
 				command: 'mermaidLivePreview.showDiagramAtPosition',
 				arguments: [document.uri, line],
 			};
@@ -369,19 +362,31 @@ export async function activate(context: vscode.ExtensionContext) {
 					}
 				}
 
-				const blockCode = getMermaidBlockAtLine(document, targetLine);
-				if (!blockCode) {
+				const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+				const includeFrontMatter = config.get<boolean>(
+					'copy.includeFrontMatter',
+					true,
+				);
+
+				let rawCode: string | undefined;
+				if (document.languageId === 'mermaid' && !includeFrontMatter) {
+					rawCode = getMermaidBlockWithoutFrontMatter(document);
+				} else {
+					rawCode = getMermaidBlockAtLine(document, targetLine);
+				}
+
+				if (!rawCode) {
 					vscode.window.showInformationMessage(
 						'No Mermaid diagram found at this location to copy.',
 					);
 					return;
 				}
 
-				await vscode.env.clipboard.writeText(blockCode);
+				await vscode.env.clipboard.writeText(rawCode);
 				logger.logInfo('Copied Mermaid diagram to clipboard', {
 					command: 'copyDiagramCode',
 					line: targetLine,
-					length: blockCode.length,
+					length: rawCode.length,
 				});
 				vscode.window.showInformationMessage(
 					'Mermaid diagram copied to the clipboard.',
@@ -398,70 +403,136 @@ export async function activate(context: vscode.ExtensionContext) {
 		},
 	);
 
-	const copyDiagramCodeWithoutFrontMatterCommand =
-		vscode.commands.registerCommand(
-			'mermaidLivePreview.copyDiagramCodeWithoutFrontMatter',
-			async (uri: vscode.Uri | undefined) => {
-				try {
-					let document: vscode.TextDocument | undefined;
+	const copyDiagramCodeWithWrapperCommand = vscode.commands.registerCommand(
+		'mermaidLivePreview.copyDiagramCodeWithWrapper',
+		async (uri: vscode.Uri | undefined, line: number | undefined) => {
+			try {
+				let document: vscode.TextDocument | undefined;
+				let targetLine = line;
 
-					if (uri) {
-						document = await vscode.workspace.openTextDocument(uri);
-					} else if (vscode.window.activeTextEditor) {
-						document = vscode.window.activeTextEditor.document;
+				if (uri) {
+					document = await vscode.workspace.openTextDocument(uri);
+				} else if (vscode.window.activeTextEditor) {
+					document = vscode.window.activeTextEditor.document;
+					if (typeof targetLine !== 'number') {
+						targetLine = vscode.window.activeTextEditor.selection.active.line;
 					}
+				}
 
-					if (!document) {
-						logger.logError(
-							'copyDiagramCodeWithoutFrontMatter could not resolve a document',
-						);
-						vscode.window.showErrorMessage(
-							'Unable to copy Mermaid diagram: no document context available.',
-						);
-						return;
-					}
-
-					if (document.languageId !== 'mermaid') {
-						logger.logWarning(
-							'copyDiagramCodeWithoutFrontMatter invoked for unsupported document',
-							{
-								languageId: document.languageId,
-								uri: document.uri.toString(),
-							},
-						);
-						vscode.window.showInformationMessage(
-							'Mermaid Viewer only works with Mermaid files for this action.',
-						);
-						return;
-					}
-
-					const blockCode = getMermaidBlockWithoutFrontMatter(document);
-					if (!blockCode) {
-						vscode.window.showInformationMessage(
-							'No Mermaid code found to copy.',
-						);
-						return;
-					}
-
-					await vscode.env.clipboard.writeText(blockCode);
-					logger.logInfo('Copied Mermaid diagram to clipboard', {
-						command: 'copyDiagramCodeWithoutFrontMatter',
-						length: blockCode.length,
-					});
-					vscode.window.showInformationMessage(
-						'Mermaid diagram copied to the clipboard.',
-					);
-				} catch (error) {
+				if (!document) {
 					logger.logError(
-						'Failed to copy Mermaid diagram code without front matter',
-						error instanceof Error ? error : new Error(String(error)),
+						'copyDiagramCodeWithWrapper could not resolve a document',
 					);
 					vscode.window.showErrorMessage(
-						'Unable to copy Mermaid diagram. See output for details.',
+						'Unable to copy Mermaid diagram: no document context available.',
 					);
+					return;
 				}
-			},
-		);
+
+				if (
+					document.languageId !== 'markdown' &&
+					document.languageId !== 'mermaid'
+				) {
+					logger.logWarning(
+						'copyDiagramCodeWithWrapper invoked for unsupported document',
+						{
+							languageId: document.languageId,
+							uri: document.uri.toString(),
+						},
+					);
+					vscode.window.showInformationMessage(
+						'Mermaid Viewer only works with Markdown and Mermaid files.',
+					);
+					return;
+				}
+
+				if (typeof targetLine !== 'number') {
+					if (document.languageId === 'mermaid') {
+						targetLine = 0;
+					} else {
+						logger.logError(
+							'copyDiagramCodeWithWrapper missing line information',
+						);
+						vscode.window.showErrorMessage(
+							'Unable to copy Mermaid diagram: missing line information.',
+						);
+						return;
+					}
+				}
+
+				const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+				const includeFrontMatter = config.get<boolean>(
+					'copy.includeFrontMatter',
+					true,
+				);
+				const wrapper = config.get<string>('copy.wrapper', '{{mermaid-code}}');
+
+				let rawCode: string | undefined;
+				if (document.languageId === 'mermaid' && !includeFrontMatter) {
+					rawCode = getMermaidBlockWithoutFrontMatter(document);
+				} else {
+					rawCode = getMermaidBlockAtLine(document, targetLine);
+				}
+
+				if (!rawCode) {
+					vscode.window.showInformationMessage(
+						'No Mermaid diagram found at this location to copy.',
+					);
+					return;
+				}
+
+				const textToCopy = (() => {
+					if (wrapper.trim() === '') {
+						return rawCode;
+					}
+					if (!wrapper.includes('{{mermaid-code}}')) {
+						logger.logWarning(
+							'copy.wrapper is set but missing {{mermaid-code}} placeholder; copying plain code',
+							{ wrapper },
+						);
+						vscode.window.showWarningMessage(
+							'Mermaid Viewer: copy.wrapper setting is missing the {{mermaid-code}} placeholder. Copied plain code instead. Update the setting in Preferences.',
+						);
+						return rawCode;
+					}
+
+					// Check if code is already wrapped with the same wrapper
+					const [prefix, suffix] = wrapper.split('{{mermaid-code}}');
+					const trimmedPrefix = prefix.trimEnd();
+					const trimmedSuffix = suffix.trimStart();
+					if (
+						trimmedPrefix &&
+						trimmedSuffix &&
+						rawCode.startsWith(trimmedPrefix) &&
+						rawCode.endsWith(trimmedSuffix)
+					) {
+						// Already wrapped, return as-is
+						return rawCode;
+					}
+
+					return wrapper.replace('{{mermaid-code}}', rawCode);
+				})();
+
+				await vscode.env.clipboard.writeText(textToCopy);
+				logger.logInfo('Copied Mermaid diagram with wrapper to clipboard', {
+					command: 'copyDiagramCodeWithWrapper',
+					line: targetLine,
+					length: textToCopy.length,
+				});
+				vscode.window.showInformationMessage(
+					'Mermaid diagram with wrapper copied to the clipboard.',
+				);
+			} catch (error) {
+				logger.logError(
+					'Failed to copy Mermaid diagram code with wrapper',
+					error instanceof Error ? error : new Error(String(error)),
+				);
+				vscode.window.showErrorMessage(
+					'Unable to copy Mermaid diagram. See output for details.',
+				);
+			}
+		},
+	);
 
 	// Register command to show preview
 	const showPreviewCommand = vscode.commands.registerCommand(
@@ -677,7 +748,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		showPreviewToSideCommand,
 		showDiagramAtPositionCommand,
 		copyDiagramCodeCommand,
-		copyDiagramCodeWithoutFrontMatterCommand,
+		copyDiagramCodeWithWrapperCommand,
 		changeDocumentSubscription,
 		changeActiveEditorSubscription,
 		visibleEditorsSubscription,

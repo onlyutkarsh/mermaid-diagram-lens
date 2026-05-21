@@ -1,0 +1,7 @@
+[
+  {
+    "key": "ctrl+shift+c",
+    "command": "mermaidLivePreview.copyDiagramCodeWithWrapper",
+    "when": "editorLangId == markdown || editorLangId == mermaid"
+  }
+]
