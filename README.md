@@ -17,6 +17,8 @@ A VSCode extension that gives you a powerful viewer for Mermaid diagrams with in
 - **Theme Persistence**: Save your preferred theme as default
 - **Multi-Diagram Support**: Preview every Mermaid block in a document and jump between them with the toolbar navigation controls
 - **Offline Friendly**: Bundles Mermaid 11.12.2 locally, so previews work without a network connection or account
+- **Copy Diagram Code**: Copy the raw Mermaid source from any block via CodeLens or command palette — useful for quickly reusing diagram code elsewhere
+- **Copy with Wrapper**: Copy diagram code wrapped in a configurable template (e.g. `:::mermaid ... :::` for Azure DevOps) via right-click context menu, keyboard shortcut, or command palette
 
 ## Demo
 
@@ -47,6 +49,17 @@ In the preview panel toolbar:
 - A subtle **gutter icon** highlights Mermaid block starts in Markdown, so you can spot diagrams quickly (it's a visual cue only; use CodeLens to open preview).
 - The editor toolbar/title icon still opens the multi-diagram preview, so you can see every Mermaid block at once.
 
+### Copying Diagram Code
+
+- **Copy** (`Preview | Copy` CodeLens): Copies the raw Mermaid source for the block, respecting the `copy.includeFrontMatter` setting for standalone files.
+- **Copy with Wrapper**: Wraps the diagram code in the template configured in `mermaidLivePreview.copy.wrapper` before copying. Useful for pasting into platforms that require a specific syntax, such as Azure DevOps (`::: mermaid ... :::`).
+  - Available via right-click context menu, command palette, or a custom keyboard shortcut.
+  - If the code already contains the wrapper, it won't be applied twice.
+  - Configure the wrapper in settings:
+    ```json
+    "mermaidLivePreview.copy.wrapper": ":::mermaid\n{{mermaid-code}}\n:::"
+    ```
+
 ![CodeLens and Gutter Icon](https://raw.githubusercontent.com/onlyutkarsh/mermaid-viewer/main/marketplace/preview.webp)
 
 ### Supported Themes
@@ -73,7 +86,14 @@ Configure the extension through VSCode settings:
   "mermaidLivePreview.autoRefresh": true,
 
   // Delay in milliseconds before refreshing preview after changes
-  "mermaidLivePreview.refreshDelay": 500
+  "mermaidLivePreview.refreshDelay": 500,
+
+  // Include frontmatter when copying from standalone .mmd/.mermaid files
+  "mermaidLivePreview.copy.includeFrontMatter": true,
+
+  // Template used when copying with wrapper. Use {{mermaid-code}} as the placeholder.
+  // Example for Azure DevOps:
+  "mermaidLivePreview.copy.wrapper": ":::mermaid\n{{mermaid-code}}\n:::"
 }
 ```
 
@@ -94,6 +114,8 @@ graph TD
 - `Mermaid Viewer: Open Preview` - Shows Mermaid diagrams from the active Markdown or Mermaid file in the current editor column.
 - `Mermaid Viewer: Open Preview to the Side` - Same preview behavior, but always opens in the column beside the editor for live editing.
 - `Mermaid Viewer: Preview Diagram Here` - Focuses only the Mermaid block at the current cursor (or the CodeLens target) and keeps that single-diagram panel in sync while you type.
+- `Mermaid Viewer: Copy` - Copies the raw Mermaid source code for the diagram at the current cursor position.
+- `Mermaid Viewer: Copy with Wrapper` - Copies the diagram code wrapped in the template from `mermaidLivePreview.copy.wrapper`. Also available via right-click context menu.
 
 ## Requirements
 
@@ -114,6 +136,8 @@ This extension contributes the following settings:
 * `mermaidLivePreview.useVSCodeTheme`: Sync theme with VSCode
 * `mermaidLivePreview.autoRefresh`: Enable/disable auto-refresh
 * `mermaidLivePreview.refreshDelay`: Set refresh delay in milliseconds
+* `mermaidLivePreview.copy.includeFrontMatter`: Include frontmatter when copying from standalone `.mmd`/`.mermaid` files (default: `true`)
+* `mermaidLivePreview.copy.wrapper`: Template applied by "Copy with Wrapper". Use `{{mermaid-code}}` as the placeholder (default: `{{mermaid-code}}`)
 
 ## Contributing
 

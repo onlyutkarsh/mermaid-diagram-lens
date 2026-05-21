@@ -91,8 +91,8 @@
         "title": "Mermaid Viewer: Copy"
       },
       {
-        "command": "mermaidLivePreview.copyDiagramCodeWithoutFrontMatter",
-        "title": "Mermaid Viewer: Copy without frontmatter"
+        "command": "mermaidLivePreview.copyDiagramCodeWithWrapper",
+        "title": "Mermaid Viewer: Copy with Wrapper"
       }
     ],
     "menus": {
@@ -105,9 +105,9 @@
       ],
       "editor/context": [
         {
-          "command": "mermaidLivePreview.showPreview",
+          "command": "mermaidLivePreview.copyDiagramCodeWithWrapper",
           "when": "editorLangId == markdown || editorLangId == mermaid",
-          "group": "navigation"
+          "group": "9_cutcopypaste"
         }
       ]
     },
@@ -187,6 +187,19 @@
           "type": "number",
           "default": 0,
           "description": "Maximum time in milliseconds to wait for a diagram to render (0 = no timeout, allows unlimited rendering time for large diagrams)"
+        },
+        "mermaidLivePreview.copy.includeFrontMatter": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include frontmatter when copying Mermaid code from standalone .mmd/.mermaid files"
+        },
+        "mermaidLivePreview.copy.wrapper": {
+          "type": "string",
+          "default": "{{mermaid-code}}",
+          "editPresentation": "multilineText",
+          "pattern": "(^$|.*\\{\\{mermaid-code\\}\\}.*)",
+          "patternErrorMessage": "Wrapper must contain {{mermaid-code}} as the placeholder for the diagram code (e.g. :::mermaid\\n{{mermaid-code}}\\n:::)",
+          "description": "Template used when copying Mermaid code. Use {{mermaid-code}} as the placeholder for the diagram code. Example for Azure DevOps: :::mermaid\n{{mermaid-code}}\n:::"
         }
       }
     }
