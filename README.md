@@ -4,21 +4,22 @@ A VSCode extension that gives you a powerful viewer for Mermaid diagrams with in
 
 ## Features
 
-- **Syntax Highlighting**: Full syntax highlighting for Mermaid diagrams in markdown code blocks and standalone .mmd/.mermaid files
-- **Independent Theme Selection**: Choose from multiple Mermaid themes (default, dark, forest, neutral, base) directly in the preview panel
-- **Optional VSCode Theme Sync**: Toggle option to automatically sync Mermaid theme with your VSCode theme (dark/light)
-- **Live Preview**: Automatic preview updates as you edit your Mermaid diagrams
-- **Rich Preview Toolbar**: Zoom, pan, reset, navigate between diagrams, and change the preview chrome (match VS Code, light, or dark) without leaving the panel
-- **Keyboard Shortcuts**: Use `+`/`-` to zoom, `R` to reset, and arrow keys to pan around diagrams
-- **Export Options**: Save any diagram as SVG, PNG (1x-4x), or JPG (1x-4x) right from the preview toolbar. Dimensions are displayed in the menu, so you know exactly what you're exporting
-- **Copy to Clipboard**: Copy diagrams directly to your clipboard as SVG, PNG, or JPG for quick pasting into other apps
-- **On-Document Shortcuts**: Click the CodeLens button or gutter icon on each Mermaid block (fenced `mermaid` blocks or `::: mermaid` containers) to open the preview (to the side) without leaving the editor
-- **Side-by-Side View**: Open preview beside your editor for convenient editing
-- **Theme Persistence**: Save your preferred theme as default
-- **Multi-Diagram Support**: Preview every Mermaid block in a document and jump between them with the toolbar navigation controls
-- **Offline Friendly**: Bundles Mermaid 11.12.2 locally, so previews work without a network connection or account
-- **Copy Diagram Code**: Copy the raw Mermaid source from any block via CodeLens or command palette — useful for quickly reusing diagram code elsewhere
-- **Copy with Wrapper**: Copy diagram code wrapped in a configurable template (e.g. `:::mermaid ... :::` for Azure DevOps) via right-click context menu, keyboard shortcut, or command palette
+- **Syntax Highlighting**: Full syntax highlighting for Mermaid diagrams in markdown code blocks and standalone `.mmd`/`.mermaid` files
+- **Live Preview**: Automatic preview updates as you edit, with side-by-side layout and multi-diagram support (navigate between blocks with the toolbar controls)
+- **Theming**: Choose from five built-in themes (default, dark, forest, neutral, base), optionally sync with your VS Code theme, and save your preference as the default
+- **Preview & Navigation**: Toolbar with zoom (`+`/`-`), pan (arrow keys or drag), reset (`R`), and appearance override (match VS Code, light, or dark). Works with keyboard shortcuts too
+- **On-Document Shortcuts**: CodeLens buttons and gutter icons on every Mermaid block let you open a focused single-diagram preview without leaving the editor
+- **Export & Copy Image**: Save or copy any diagram as SVG, PNG (1x–4x), or JPG (1x–4x) from the toolbar — dimensions shown before you export
+- **Copy Source**: Copy raw Mermaid code via CodeLens or command palette
+- **Copy with Wrapper**: Wrap copied code in a configurable template — useful for platforms that require a specific syntax (e.g. Azure DevOps). Configure via `mermaidLivePreview.copy.wrapper` in settings:
+  ```
+  :::mermaid
+  {{mermaid-code}}
+  :::
+  ```
+
+- **ELK Layout Support**: Use the [ELK layout engine](https://eclipse.dev/elk/) for complex diagrams by adding `layout: elk` frontmatter — works with ER diagrams, flowcharts, and more. Loaded on demand, so there is no cost for diagrams that use the default layout
+- **Offline Friendly**: Bundles Mermaid locally, so previews work without a network connection or account
 
 ## Demo
 
@@ -61,6 +62,35 @@ In the preview panel toolbar:
     ```
 
 ![CodeLens and Gutter Icon](https://raw.githubusercontent.com/onlyutkarsh/mermaid-viewer/main/marketplace/preview.webp)
+
+### Using ELK Layout
+
+For complex diagrams where the default dagre layout produces crowded or hard-to-read results, you can switch to the [ELK layout engine](https://eclipse.dev/elk/) by adding a frontmatter config block:
+
+````
+```mermaid
+---
+config:
+  layout: elk
+---
+erDiagram
+  Customer ||--o{ Order : places
+  Order ||--|{ LineItem : contains
+  Product ||--o{ LineItem : "ordered in"
+```
+````
+
+ELK layout is supported on ER diagrams, flowcharts, and any other diagram type that accepts a `layout` config. The ELK engine is loaded on demand (only when a diagram requests it), so there is no performance cost for diagrams that use the default layout.
+
+ELK also supports several sub-algorithms via `layout: elk.<algorithm>`:
+
+| Algorithm          | Description                            |
+| ------------------ | -------------------------------------- |
+| `elk`              | Layered layout (default ELK algorithm) |
+| `elk.stress`       | Force-directed stress minimization     |
+| `elk.force`        | Simple force-directed layout           |
+| `elk.mrtree`       | Compact tree layout                    |
+| `elk.sporeOverlap` | Overlap removal                        |
 
 ### Supported Themes
 
