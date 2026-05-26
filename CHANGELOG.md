@@ -1,3 +1,12 @@
+## [1.4.6](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.5...v1.4.6) (2026-05-26)
+
+
+### Features
+
+* Integrate ELK layout support for improved diagram rendering and add example ER diagrams ([01931fc](https://github.com/onlyutkarsh/mermaid-viewer/commit/01931fc02a7ce0cdaa99ca5abea9f56a92d92028))
+
+
+
 ## [1.4.5](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.4...v1.4.5) (2026-05-21)
 
 
