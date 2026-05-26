@@ -996,6 +996,15 @@ export class MermaidPreviewPanel {
 					'codicon.css',
 				),
 			);
+			const elkLayoutUri = webview.asWebviewUri(
+				vscode.Uri.joinPath(
+					this._extensionUri,
+					'out',
+					'mermaid-layout-elk',
+					'dist',
+					'mermaid-layout-elk.esm.min.mjs',
+				),
+			);
 
 			const docId = documentId ?? 'unknown';
 			const nonce = this._generateNonce();
@@ -1012,6 +1021,8 @@ export class MermaidPreviewPanel {
     <link rel="stylesheet" href="${codiconStylesUri}">
     <script type="module" nonce="${nonce}">
         import mermaid from '${mermaidScriptUri}';
+        import elkLayouts from '${elkLayoutUri}';
+        mermaid.registerLayoutLoaders(elkLayouts);
 
         const vscode = acquireVsCodeApi();
         const documentId = ${JSON.stringify(docId)};

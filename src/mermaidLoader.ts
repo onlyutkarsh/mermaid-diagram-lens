@@ -5,6 +5,33 @@ import mermaid from 'mermaid';
 
 const MERMAID_PREVIEW_CLASS = 'mermaid-live-preview';
 
+// Capture the script's own URL synchronously — document.currentScript is null inside async callbacks.
+const _SCRIPT_BASE =
+	typeof document !== 'undefined'
+		? ((document.currentScript as HTMLScriptElement | null)?.src ?? '').replace(
+				/\/[^/]+$/,
+				'/',
+			)
+		: '';
+
+// Register ELK layout loaders once. The heavy render chunk (~1.6 MB) is loaded
+// lazily by mermaid only when a diagram actually requests layout: elk.
+const _elkReady: Promise<void> = _SCRIPT_BASE
+	? (async () => {
+			try {
+				// Template-literal URL keeps esbuild from bundling this import.
+				const elkUrl = `${_SCRIPT_BASE}mermaid-layout-elk/dist/mermaid-layout-elk.esm.min.mjs`;
+				// eslint-disable-next-line no-unsanitized/method
+				const mod = (await import(elkUrl)) as {
+					default: Parameters<typeof mermaid.registerLayoutLoaders>[0];
+				};
+				mermaid.registerLayoutLoaders(mod.default);
+			} catch {
+				// ELK unavailable — diagrams that request elk layout will fall back to dagre.
+			}
+		})()
+	: Promise.resolve();
+
 if (typeof window !== 'undefined') {
 	let currentController: AbortController | undefined;
 
@@ -364,6 +391,7 @@ if (typeof window !== 'undefined') {
 			return;
 		}
 
+		await _elkReady;
 		mermaid.initialize({
 			startOnLoad: false,
 			securityLevel: 'loose',

@@ -211,7 +211,7 @@
     "esbuild-loader": "esbuild ./src/mermaidLoader.ts --bundle --outfile=out/mermaidLoader.js --format=iife --platform=browser",
     "esbuild": "npm run -S esbuild-base -- --sourcemap && npm run esbuild-loader -- --sourcemap && npm run copy-mermaid && npm run copy-codicons",
     "esbuild-watch": "npm run -S esbuild-base -- --sourcemap --watch & npm run esbuild-loader -- --sourcemap --watch && npm run copy-mermaid",
-    "copy-mermaid": "shx rm -rf out/mermaid && shx mkdir -p out/mermaid/dist/chunks && shx cp node_modules/mermaid/dist/mermaid.esm.min.mjs out/mermaid/dist/ && shx cp -r node_modules/mermaid/dist/chunks/mermaid.esm.min out/mermaid/dist/chunks/",
+    "copy-mermaid": "shx rm -rf out/mermaid && shx mkdir -p out/mermaid/dist/chunks && shx cp node_modules/mermaid/dist/mermaid.esm.min.mjs out/mermaid/dist/ && shx cp -r node_modules/mermaid/dist/chunks/mermaid.esm.min out/mermaid/dist/chunks/ && shx rm -rf out/mermaid-layout-elk && shx mkdir -p out/mermaid-layout-elk/dist/chunks && shx cp node_modules/@mermaid-js/layout-elk/dist/mermaid-layout-elk.esm.min.mjs out/mermaid-layout-elk/dist/ && shx cp -r node_modules/@mermaid-js/layout-elk/dist/chunks/mermaid-layout-elk.esm.min out/mermaid-layout-elk/dist/chunks/",
     "copy-codicons": "shx rm -rf out/codicons && shx mkdir -p out/codicons && shx cp node_modules/@vscode/codicons/dist/codicon.css out/codicons/ && shx cp node_modules/@vscode/codicons/dist/codicon.ttf out/codicons/",
     "compile": "npm run esbuild",
     "watch": "npm run esbuild-watch",
@@ -237,6 +237,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@mermaid-js/layout-elk": "^0.2.1",
     "@vscode/codicons": "^0.0.45",
     "mermaid": "^11.15.0"
   },
