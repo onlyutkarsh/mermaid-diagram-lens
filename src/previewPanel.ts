@@ -44,6 +44,7 @@ export class MermaidPreviewPanel {
 	private _singleBlockStartLine: number | undefined;
 	private _singleBlockEndLine: number | undefined;
 	private _isDisposed = false;
+	private _webviewReady = false;
 
 	public static forEachPanel(callback: (panel: MermaidPreviewPanel) => void) {
 		for (const panel of MermaidPreviewPanel._panels) {
@@ -371,6 +372,12 @@ export class MermaidPreviewPanel {
 					case 'showKeyboardShortcuts':
 						this._showKeyboardShortcuts();
 						break;
+					case 'webviewReady':
+						this._webviewReady = true;
+						break;
+					case 'refreshDiagram':
+						this._render();
+						break;
 				}
 			},
 			null,
@@ -476,15 +483,51 @@ export class MermaidPreviewPanel {
 		// If we've been debouncing for too long, force an update immediately
 		if (timeSinceFirstRequest >= maxDebounceTime) {
 			this._firstUpdateRequestTime = undefined;
-			this._render();
+			this._pushUpdate();
 			return;
 		}
 
 		// Otherwise, debounce updates normally
 		this._updateTimeout = setTimeout(() => {
 			this._firstUpdateRequestTime = undefined;
-			this._render();
+			this._pushUpdate();
 		}, delay);
+	}
+
+	private _pushUpdate() {
+		if (this._webviewReady) {
+			this._sendDiagramUpdate();
+		} else {
+			this._render();
+		}
+	}
+
+	private _sendDiagramUpdate() {
+		if (this._isDisposed || !this._currentDocument) {
+			return;
+		}
+
+		const blocks = this._getMermaidBlocks(this._currentDocument);
+		let codes: string[];
+
+		if (this._mode === 'single') {
+			const idx = this._singleBlockIndex;
+			const block = typeof idx === 'number' ? blocks[idx] : undefined;
+			if (!block) {
+				this._webviewReady = false;
+				this._render();
+				return;
+			}
+			codes = [block.code];
+		} else {
+			codes = blocks.map((b) => b.code);
+		}
+
+		void this._panel.webview.postMessage({
+			command: 'updateDiagrams',
+			diagrams: codes,
+		});
+		this._updatePanelTitle();
 	}
 
 	public handleSelectionChange(
@@ -665,6 +708,7 @@ export class MermaidPreviewPanel {
 
 	private _renderAll(overrideTheme?: string) {
 		const webview = this._panel.webview;
+		this._webviewReady = false;
 
 		if (!this._currentDocument) {
 			webview.html = this._getErrorHtml('No document to preview');
@@ -697,6 +741,7 @@ export class MermaidPreviewPanel {
 		overrideTheme?: string,
 	) {
 		const webview = this._panel.webview;
+		this._webviewReady = false;
 
 		if (!this._currentDocument) {
 			webview.html = this._getErrorHtml('No document to preview');
@@ -974,10 +1019,7 @@ export class MermaidPreviewPanel {
 		documentId?: string,
 	): string {
 		try {
-			const diagrams = JSON.parse(mermaidCode);
-			const escapedDiagrams = diagrams.map((code: string) =>
-				code.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$'),
-			);
+			const diagrams: string[] = JSON.parse(mermaidCode);
 			const appearanceClass = this._getAppearanceClass(appearance);
 			const mermaidScriptUri = webview.asWebviewUri(
 				vscode.Uri.joinPath(
@@ -1037,7 +1079,7 @@ export class MermaidPreviewPanel {
             singleLine: ${this._singleLine ?? 'undefined'}
         };
 
-        const diagrams = ${JSON.stringify(escapedDiagrams)};
+        const diagrams = ${JSON.stringify(diagrams)};
         const renderTimeout = ${renderTimeout};
         let currentZoom = typeof savedState.currentZoom === 'number' ? savedState.currentZoom : 1.0;
         let panX = typeof savedState.panX === 'number' ? savedState.panX : 0;
@@ -1126,25 +1168,6 @@ export class MermaidPreviewPanel {
             ]);
         }
 
-        async function validateDiagram(diagram, index) {
-            try {
-                if (renderTimeout > 0) {
-                    await withTimeout(
-                        mermaid.parse(diagram),
-                        renderTimeout,
-                        'Diagram validation timed out after ' + renderTimeout + 'ms'
-                    );
-                } else {
-                    await mermaid.parse(diagram);
-                }
-                return true;
-            } catch (error) {
-                showRenderError(index, error);
-                lastParseError = null;
-                return false;
-            }
-        }
-
         mermaid.initialize({
             startOnLoad: false,
             theme: currentTheme,
@@ -1188,6 +1211,54 @@ export class MermaidPreviewPanel {
             viewport.addEventListener('wheel', handleWheel, { passive: false });
         }
 
+        async function updateDiagramsInPlace(newDiagrams) {
+            if (newDiagrams.length !== diagrams.length) {
+                diagrams.length = 0;
+                diagrams.push(...newDiagrams);
+                await renderAllDiagrams();
+                return;
+            }
+
+            const changed = [];
+            for (let i = 0; i < newDiagrams.length; i++) {
+                if (newDiagrams[i] !== diagrams[i]) {
+                    changed.push(i);
+                    diagrams[i] = newDiagrams[i];
+                }
+            }
+
+            for (const i of changed) {
+                lastParseError = null;
+                try {
+                    let svg;
+                    if (renderTimeout > 0) {
+                        const result = await withTimeout(
+                            mermaid.render('mermaid-' + i + '-' + Date.now(), diagrams[i]),
+                            renderTimeout,
+                            'Diagram rendering timed out after ' + renderTimeout + 'ms. The diagram may be too complex.'
+                        );
+                        svg = result.svg;
+                    } else {
+                        const result = await mermaid.render('mermaid-' + i + '-' + Date.now(), diagrams[i]);
+                        svg = result.svg;
+                    }
+                    if (lastParseError) {
+                        showRenderError(i, lastParseError);
+                        lastParseError = null;
+                        continue;
+                    }
+                    const diagramEl = document.getElementById('diagram-' + i);
+                    if (diagramEl) {
+                        diagramEl.classList.remove('loading');
+                        diagramEl.innerHTML = svg;
+                    }
+                } catch (error) {
+                    showRenderError(i, error);
+                    lastParseError = null;
+                }
+            }
+        }
+
         async function renderAllDiagrams() {
             const container = document.getElementById('diagrams-container');
             container.innerHTML = '';
@@ -1207,8 +1278,8 @@ export class MermaidPreviewPanel {
                 return;
             }
 
+            // Create all shells upfront so loading spinners appear immediately
             for (let i = 0; i < diagrams.length; i++) {
-                lastParseError = null;
                 const shell = document.createElement('div');
                 shell.className = 'diagram-shell';
                 shell.dataset.index = i.toString();
@@ -1218,8 +1289,12 @@ export class MermaidPreviewPanel {
                     '</div>';
                 container.appendChild(shell);
                 shell.addEventListener('click', () => focusDiagram(i));
+            }
 
-                // Set a timeout to catch stuck renders (only if configured)
+            // Render diagrams sequentially (mermaid uses shared state)
+            for (let i = 0; i < diagrams.length; i++) {
+                lastParseError = null;
+
                 let renderTimeoutId;
                 if (renderTimeout > 0) {
                     renderTimeoutId = setTimeout(() => {
@@ -1228,11 +1303,6 @@ export class MermaidPreviewPanel {
                             showRenderError(i, new Error('Diagram rendering timed out after ' + renderTimeout + 'ms. The diagram may be too complex or contain syntax errors.'));
                         }
                     }, renderTimeout);
-                }
-
-                if (!(await validateDiagram(diagrams[i], i))) {
-                    if (renderTimeoutId) clearTimeout(renderTimeoutId);
-                    continue;
                 }
 
                 try {
@@ -1262,7 +1332,6 @@ export class MermaidPreviewPanel {
                     }
                 } catch (error) {
                     if (renderTimeoutId) clearTimeout(renderTimeoutId);
-                    console.error('Failed to render diagram ' + i, error);
                     showRenderError(i, error);
                     lastParseError = null;
                 }
@@ -1465,7 +1534,7 @@ export class MermaidPreviewPanel {
             const button = document.getElementById('theme-button');
             if (button) {
                 const label = THEME_LABELS[theme] || 'Custom';
-                button.textContent = 'Theme: ' + label + ' ▾';
+                button.innerHTML = 'Theme: ' + label + ' <span class="codicon codicon-triangle-down dropdown-arrow" aria-hidden="true"></span>';
             }
         }
 
@@ -1473,7 +1542,7 @@ export class MermaidPreviewPanel {
             const button = document.getElementById('appearance-button');
             if (button) {
                 const label = APPEARANCE_LABELS[appearance] || 'Custom';
-                button.textContent = 'Appearance: ' + label + ' ▾';
+                button.innerHTML = 'Appearance: ' + label + ' <span class="codicon codicon-triangle-down dropdown-arrow" aria-hidden="true"></span>';
             }
         }
 
@@ -2001,6 +2070,11 @@ export class MermaidPreviewPanel {
                 return;
             }
 
+            if (message.command === 'updateDiagrams') {
+                updateDiagramsInPlace(message.diagrams);
+                return;
+            }
+
             if (message.command === 'copyCompleted') {
                 closeAllDropdowns();
             }
@@ -2009,7 +2083,7 @@ export class MermaidPreviewPanel {
         let renderAttempted = false;
         const RENDER_TIMEOUT_MS = 10000; // 10 seconds
 
-        function attemptRender() {
+        async function attemptRender() {
             if (renderAttempted) {
                 return;
             }
@@ -2038,7 +2112,7 @@ export class MermaidPreviewPanel {
                 updateDropdownSelection('dropdown-theme', currentTheme);
                 updateDropdownSelection('dropdown-appearance', currentAppearance);
                 updateThemeButtonLabel(currentTheme);
-                renderAllDiagrams();
+                await renderAllDiagrams();
                 scheduleZoomUpdate();
                 scheduleTransform();
                 bindToolbarControls();
@@ -2046,6 +2120,7 @@ export class MermaidPreviewPanel {
                 // Save state immediately on load to ensure it persists for restoration
                 saveInteractionState();
                 vscode.postMessage({ command: 'lifecycleEvent', status: 'webviewLoaded', documentId });
+                vscode.postMessage({ command: 'webviewReady' });
             } catch (error) {
                 vscode.postMessage({
                     command: 'webviewError',
@@ -2167,7 +2242,8 @@ export class MermaidPreviewPanel {
             const actionMap = new Map([
                 ['zoom-in', zoomIn],
                 ['zoom-out', zoomOut],
-                ['zoom-reset', zoomReset]
+                ['zoom-reset', zoomReset],
+                ['refresh', () => vscode.postMessage({ command: 'refreshDiagram' })]
             ]);
 
             actionMap.forEach((handler, action) => {
@@ -2299,10 +2375,10 @@ export class MermaidPreviewPanel {
         .toolbar {
             background-color: var(--preview-toolbar-bg);
             border-bottom: 1px solid var(--preview-toolbar-border);
-            padding: 10px 16px;
+            padding: 6px 10px;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 6px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
             color: var(--preview-toolbar-fg);
             z-index: 2;
@@ -2311,8 +2387,8 @@ export class MermaidPreviewPanel {
         .toolbar-group {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 0 8px;
+            gap: 4px;
+            padding: 0 6px;
             border-right: 1px solid var(--preview-toolbar-border);
         }
 
@@ -2324,7 +2400,7 @@ export class MermaidPreviewPanel {
             background-color: transparent;
             color: var(--preview-toolbar-fg);
             border: 1px solid transparent;
-            padding: 6px 12px;
+            padding: 4px 8px;
             border-radius: 4px;
             font-size: 12px;
             cursor: pointer;
@@ -2347,12 +2423,16 @@ export class MermaidPreviewPanel {
             cursor: not-allowed;
         }
 
-        #zoom-level {
-            min-width: 45px;
-            text-align: center;
+        .zoom-label {
             font-size: 12px;
-            font-weight: 600;
             color: var(--preview-toolbar-fg);
+            opacity: 0.7;
+            cursor: default;
+            user-select: none;
+        }
+
+        #zoom-level {
+            font-weight: 600;
         }
 
         #diagram-viewport {
@@ -2444,6 +2524,12 @@ export class MermaidPreviewPanel {
 
         .dropdown {
             position: relative;
+        }
+
+        .dropdown-arrow {
+            font-size: 14px;
+            vertical-align: middle;
+            margin-left: 2px;
         }
 
         .action-btn {
@@ -2564,14 +2650,14 @@ export class MermaidPreviewPanel {
             align-items: center;
             justify-content: center;
             min-height: 200px;
-            color: var(--vscode-foreground);
+            color: var(--vscode-editor-foreground);
             opacity: 0.7;
         }
 
         .loading-spinner {
             width: 40px;
             height: 40px;
-            border: 4px solid var(--vscode-foreground);
+            border: 4px solid var(--vscode-editor-foreground);
             border-top-color: transparent;
             border-radius: 50%;
             animation: spin 1s linear infinite;
@@ -2581,7 +2667,8 @@ export class MermaidPreviewPanel {
 
         .loading-text {
             font-size: 14px;
-            color: var(--vscode-descriptionForeground);
+            color: var(--vscode-editor-foreground);
+            opacity: 0.6;
         }
 
         @keyframes spin {
@@ -2591,20 +2678,26 @@ export class MermaidPreviewPanel {
 </head>
 <body class="${appearanceClass}">
     <div class="toolbar">
-        <div class="toolbar-group">
+        <div class="toolbar-group zoom-group">
+            <span class="zoom-label">Zoom: <span id="zoom-level">100%</span></span>
             <button data-action="zoom-out" title="Zoom out" aria-label="Zoom out">
                 <span class="codicon codicon-zoom-out" aria-hidden="true"></span>
             </button>
-            <span id="zoom-level">100%</span>
             <button data-action="zoom-in" title="Zoom in" aria-label="Zoom in">
                 <span class="codicon codicon-zoom-in" aria-hidden="true"></span>
             </button>
-            <button data-action="zoom-reset">Reset</button>
+            <button data-action="zoom-reset" title="Reset zoom and pan">
+                <span class="codicon codicon-screen-full" aria-hidden="true"></span>
+            </button>
         </div>
         <div class="toolbar-group" id="diagram-controls">
-            <button id="prev-diagram" data-direction="-1">◀</button>
+            <button id="prev-diagram" data-direction="-1" title="Previous diagram" aria-label="Previous diagram">
+                <span class="codicon codicon-triangle-left" aria-hidden="true"></span>
+            </button>
             <span id="diagram-indicator"></span>
-            <button id="next-diagram" data-direction="1">▶</button>
+            <button id="next-diagram" data-direction="1" title="Next diagram" aria-label="Next diagram">
+                <span class="codicon codicon-triangle-right" aria-hidden="true"></span>
+            </button>
         </div>
         <div class="toolbar-group keyboard-shortcuts-hint">
             <span class="shortcuts-icon" id="keyboard-shortcuts-icon" title="Click for keyboard shortcuts" aria-label="Keyboard shortcuts">
@@ -2612,7 +2705,7 @@ export class MermaidPreviewPanel {
             </span>
         </div>
         <div class="toolbar-group dropdown">
-            <button class="action-btn" id="theme-button" data-dropdown-toggle="theme">Theme ▾</button>
+            <button class="action-btn" id="theme-button" data-dropdown-toggle="theme">Theme <span class="codicon codicon-triangle-down dropdown-arrow" aria-hidden="true"></span></button>
             <div class="dropdown-menu" id="dropdown-theme">
                 <button data-theme-option="default">Default</button>
                 <button data-theme-option="dark">Dark</button>
@@ -2622,7 +2715,7 @@ export class MermaidPreviewPanel {
             </div>
         </div>
         <div class="toolbar-group dropdown">
-            <button class="action-btn" id="appearance-button" data-dropdown-toggle="appearance">Appearance ▾</button>
+            <button class="action-btn" id="appearance-button" data-dropdown-toggle="appearance">Appearance <span class="codicon codicon-triangle-down dropdown-arrow" aria-hidden="true"></span></button>
             <div class="dropdown-menu" id="dropdown-appearance">
                 <button data-appearance-option="matchVSCode">Match VS Code</button>
                 <button data-appearance-option="light">Light</button>
@@ -2630,7 +2723,7 @@ export class MermaidPreviewPanel {
             </div>
         </div>
         <div class="toolbar-group dropdown">
-            <button class="action-btn" data-dropdown-toggle="export">Export ▾</button>
+            <button class="action-btn" data-dropdown-toggle="export">Export <span class="codicon codicon-triangle-down dropdown-arrow" aria-hidden="true"></span></button>
             <div class="dropdown-menu" id="dropdown-export">
                 <button data-export-format="svg" data-export-scale="1">SVG</button>
                 <div class="dropdown-separator"></div>
@@ -2646,7 +2739,7 @@ export class MermaidPreviewPanel {
             </div>
         </div>
         <div class="toolbar-group dropdown">
-            <button class="action-btn" data-dropdown-toggle="copy">Copy as ▾</button>
+            <button class="action-btn" data-dropdown-toggle="copy">Copy <span class="codicon codicon-triangle-down dropdown-arrow" aria-hidden="true"></span></button>
             <div class="dropdown-menu" id="dropdown-copy">
                 <button data-copy-format="svg" data-copy-scale="1">SVG</button>
                 <div class="dropdown-separator"></div>
@@ -2660,6 +2753,9 @@ export class MermaidPreviewPanel {
                 <button data-copy-format="jpg" data-copy-scale="3">JPG (3x)</button>
                 <button data-copy-format="jpg" data-copy-scale="4">JPG (4x)</button>
             </div>
+        </div>
+        <div class="toolbar-group">
+            <button data-action="refresh" title="Reload diagram from source">Reload</button>
         </div>
     </div>
     <div id="diagram-viewport">
