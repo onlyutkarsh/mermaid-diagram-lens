@@ -1,3 +1,12 @@
+## [1.4.7](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.6...v1.4.7) (2026-06-21)
+
+
+### Features
+
+* **preview:** enhance diagram update mechanism and add webview readiness check ([46092bb](https://github.com/onlyutkarsh/mermaid-viewer/commit/46092bb41700079a588780b965a2530e54c3190e))
+
+
+
 ## [1.4.6](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.5...v1.4.6) (2026-05-26)
 
 
