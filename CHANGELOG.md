@@ -1,3 +1,19 @@
+## [2.0.0](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.7...v2.0.0) (2026-06-29)
+
+
+### Code Refactoring
+
+* rename mermaidLivePreview to mermaidViewer in previewPanel.ts ([06617cc](https://github.com/onlyutkarsh/mermaid-viewer/commit/06617cca1827e7650e5a7b0ec98da30ca4e41d14))
+
+
+### BREAKING CHANGES
+
+* All `mermaidLivePreview.*` settings and command IDs are
+renamed to `mermaidViewer.*`. Update `settings.json` keys and any custom
+keybindings accordingly - the suffix after the namespace is unchanged.
+
+
+
 ## [1.4.7](https://github.com/onlyutkarsh/mermaid-viewer/compare/v1.4.6...v1.4.7) (2026-06-21)
 
 
