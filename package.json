@@ -67,7 +67,7 @@
     ],
     "commands": [
       {
-        "command": "mermaidLivePreview.showPreview",
+        "command": "mermaidViewer.showPreview",
         "title": "Mermaid Viewer: Open Preview",
         "icon": {
           "light": "images/mermaid-gutter.svg",
@@ -75,7 +75,7 @@
         }
       },
       {
-        "command": "mermaidLivePreview.showPreviewToSide",
+        "command": "mermaidViewer.showPreviewToSide",
         "title": "Mermaid Viewer: Open Preview to the Side",
         "icon": {
           "light": "images/mermaid-gutter.svg",
@@ -83,31 +83,40 @@
         }
       },
       {
-        "command": "mermaidLivePreview.showDiagramAtPosition",
+        "command": "mermaidViewer.showDiagramAtPosition",
         "title": "Mermaid Viewer: Preview Diagram Here"
       },
       {
-        "command": "mermaidLivePreview.copyDiagramCode",
+        "command": "mermaidViewer.copyDiagramCode",
         "title": "Mermaid Viewer: Copy"
       },
       {
-        "command": "mermaidLivePreview.copyDiagramCodeWithWrapper",
+        "command": "mermaidViewer.copyDiagramCodeWithWrapper",
         "title": "Mermaid Viewer: Copy with Wrapper"
+      },
+      {
+        "command": "mermaidViewer.formatDiagram",
+        "title": "Mermaid Viewer: Format Diagram"
       }
     ],
     "menus": {
       "editor/title": [
         {
-          "command": "mermaidLivePreview.showPreviewToSide",
+          "command": "mermaidViewer.showPreviewToSide",
           "when": "editorLangId == markdown || editorLangId == mermaid",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
-          "command": "mermaidLivePreview.copyDiagramCodeWithWrapper",
+          "command": "mermaidViewer.copyDiagramCodeWithWrapper",
           "when": "editorLangId == markdown || editorLangId == mermaid",
           "group": "9_cutcopypaste"
+        },
+        {
+          "command": "mermaidViewer.formatDiagram",
+          "when": "editorLangId == markdown || editorLangId == mermaid",
+          "group": "1_modification"
         }
       ]
     },
@@ -121,7 +130,7 @@
     "configuration": {
       "title": "Mermaid Viewer",
       "properties": {
-        "mermaidLivePreview.theme": {
+        "mermaidViewer.theme": {
           "type": "string",
           "default": "default",
           "enum": [
@@ -140,22 +149,22 @@
           ],
           "description": "Default theme for Mermaid diagrams"
         },
-        "mermaidLivePreview.useVSCodeTheme": {
+        "mermaidViewer.useVSCodeTheme": {
           "type": "boolean",
           "default": false,
           "description": "Automatically sync Mermaid theme with VSCode theme (dark/light)"
         },
-        "mermaidLivePreview.autoRefresh": {
+        "mermaidViewer.autoRefresh": {
           "type": "boolean",
           "default": true,
           "description": "Automatically refresh preview on document changes"
         },
-        "mermaidLivePreview.refreshDelay": {
+        "mermaidViewer.refreshDelay": {
           "type": "number",
           "default": 500,
           "description": "Delay in milliseconds before refreshing preview after changes"
         },
-        "mermaidLivePreview.previewAppearance": {
+        "mermaidViewer.previewAppearance": {
           "type": "string",
           "default": "matchVSCode",
           "enum": [
@@ -170,7 +179,7 @@
           ],
           "description": "Appearance of the preview chrome regardless of VS Code theme"
         },
-        "mermaidLivePreview.panelTitleStyle": {
+        "mermaidViewer.panelTitleStyle": {
           "type": "string",
           "default": "full",
           "enum": [
@@ -183,23 +192,28 @@
           ],
           "description": "Style of the preview panel title"
         },
-        "mermaidLivePreview.renderTimeout": {
+        "mermaidViewer.renderTimeout": {
           "type": "number",
           "default": 0,
           "description": "Maximum time in milliseconds to wait for a diagram to render (0 = no timeout, allows unlimited rendering time for large diagrams)"
         },
-        "mermaidLivePreview.copy.includeFrontMatter": {
+        "mermaidViewer.copy.includeFrontMatter": {
           "type": "boolean",
           "default": true,
           "description": "Include frontmatter when copying Mermaid code from standalone .mmd/.mermaid files"
         },
-        "mermaidLivePreview.copy.wrapper": {
+        "mermaidViewer.copy.wrapper": {
           "type": "string",
           "default": "{{mermaid-code}}",
           "editPresentation": "multilineText",
           "pattern": "(^$|.*\\{\\{mermaid-code\\}\\}.*)",
           "patternErrorMessage": "Wrapper must contain {{mermaid-code}} as the placeholder for the diagram code (e.g. :::mermaid\\n{{mermaid-code}}\\n:::)",
           "description": "Template used when copying Mermaid code. Use {{mermaid-code}} as the placeholder for the diagram code. Example for Azure DevOps: :::mermaid\n{{mermaid-code}}\n:::"
+        },
+        "mermaidViewer.format.diagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Highlight unformatted Mermaid diagram lines with a warning squiggle and a lightbulb (Quick Fix) to fix them one at a time."
         }
       }
     }

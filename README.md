@@ -9,16 +9,18 @@ A VSCode extension that gives you a powerful viewer for Mermaid diagrams with in
 - **Theming**: Choose from five built-in themes (default, dark, forest, neutral, base), optionally sync with your VS Code theme, and save your preference as the default
 - **Preview & Navigation**: Toolbar with zoom (`+`/`-`), pan (arrow keys or drag), reset (`R`), reload, and appearance override (match VS Code, light, or dark). Works with keyboard shortcuts too
 - **On-Document Shortcuts**: CodeLens buttons and gutter icons on every Mermaid block let you open a focused single-diagram preview without leaving the editor
-- **Export & Copy Image**: Save or copy any diagram as SVG, PNG (1x–4x), or JPG (1x–4x) from the toolbar — dimensions shown before you export
+- **Export & Copy Image**: Save or copy any diagram as SVG, PNG (1x-4x), or JPG (1x-4x) from the toolbar - dimensions shown before you export
 - **Copy Source**: Copy raw Mermaid code via CodeLens or command palette
-- **Copy with Wrapper**: Wrap copied code in a configurable template — useful for platforms that require a specific syntax (e.g. Azure DevOps). Configure via `mermaidLivePreview.copy.wrapper` in settings:
+- **Copy with Wrapper**: Wrap copied code in a configurable template - useful for platforms that require a specific syntax (e.g. Azure DevOps). Configure via `mermaidViewer.copy.wrapper` in settings:
   ```
   :::mermaid
   {{mermaid-code}}
   :::
   ```
 
-- **ELK Layout Support**: Use the [ELK layout engine](https://eclipse.dev/elk/) for complex diagrams by adding `layout: elk` frontmatter — works with ER diagrams, flowcharts, and more. Loaded on demand, so there is no cost for diagrams that use the default layout
+- **Format Diagram**: Tidy a diagram's indentation and whitespace via CodeLens, command palette, or context menu. Standalone `.mmd`/`.mermaid` files also work with VS Code's built-in *Format Document* (`Shift+Alt+F`). Formatting is conservative and works across diagram types - it normalizes nesting indentation (flowchart `subgraph`/`end`, sequence `loop`/`alt`/`opt`/`par`/`critical`, class/state/ER/C4 braces, `block` groups, `gantt`/`journey` sections, multi-line state notes), trims trailing whitespace, and collapses blank lines without altering the diagram. Re-indenting is applied only to recognized structural diagram types; types where indentation is meaningful (`mindmap`, `kanban`, `treemap`, `sankey`) and any unrecognized diagram type are left un-indented on purpose - only trailing whitespace is trimmed
+- **Formatting Diagnostics**: Lines that don't match the formatting rules get a warning squiggle. Use the lightbulb (Quick Fix) on a squiggle to **Fix formatting on this line** (one at a time) or **Format Mermaid diagram** (the whole block at once). Toggle with `mermaidViewer.format.diagnostics`
+- **ELK Layout Support**: Use the [ELK layout engine](https://eclipse.dev/elk/) for complex diagrams by adding `layout: elk` frontmatter - works with ER diagrams, flowcharts, and more. Loaded on demand, so there is no cost for diagrams that use the default layout
 - **Offline Friendly**: Bundles Mermaid locally, so previews work without a network connection or account
 
 ## Demo
@@ -53,12 +55,12 @@ In the preview panel toolbar:
 ### Copying Diagram Code
 
 - **Copy** (`Preview | Copy` CodeLens): Copies the raw Mermaid source for the block, respecting the `copy.includeFrontMatter` setting for standalone files.
-- **Copy with Wrapper**: Wraps the diagram code in the template configured in `mermaidLivePreview.copy.wrapper` before copying. Useful for pasting into platforms that require a specific syntax, such as Azure DevOps (`::: mermaid ... :::`).
+- **Copy with Wrapper**: Wraps the diagram code in the template configured in `mermaidViewer.copy.wrapper` before copying. Useful for pasting into platforms that require a specific syntax, such as Azure DevOps (`::: mermaid ... :::`).
   - Available via right-click context menu, command palette, or a custom keyboard shortcut.
   - If the code already contains the wrapper, it won't be applied twice.
   - Configure the wrapper in settings:
     ```json
-    "mermaidLivePreview.copy.wrapper": ":::mermaid\n{{mermaid-code}}\n:::"
+    "mermaidViewer.copy.wrapper": ":::mermaid\n{{mermaid-code}}\n:::"
     ```
 
 ![CodeLens and Gutter Icon](https://raw.githubusercontent.com/onlyutkarsh/mermaid-viewer/main/marketplace/preview.webp)
@@ -100,6 +102,23 @@ ELK also supports several sub-algorithms via `layout: elk.<algorithm>`:
 - **Neutral**: Minimalist grayscale theme
 - **Base**: Simple base theme
 
+## Migrating from 1.x
+
+Version 2.0 renames the extension's settings and command IDs from the
+`mermaidLivePreview.*` namespace to **`mermaidViewer.*`** so they match the
+extension name. This is a breaking change - the part after the namespace is
+unchanged, so migration is a simple prefix swap:
+
+- **Settings** - in your `settings.json`, rename every `mermaidLivePreview.<key>`
+  to `mermaidViewer.<key>` (e.g. `mermaidLivePreview.theme` -> `mermaidViewer.theme`,
+  `mermaidLivePreview.copy.wrapper` -> `mermaidViewer.copy.wrapper`).
+- **Keybindings** - rebind any custom keybindings from
+  `mermaidLivePreview.<command>` to `mermaidViewer.<command>` (e.g.
+  `mermaidLivePreview.copyDiagramCodeWithWrapper` ->
+  `mermaidViewer.copyDiagramCodeWithWrapper`).
+
+Old `mermaidLivePreview.*` settings will simply be ignored after upgrading.
+
 ## Configuration
 
 Configure the extension through VSCode settings:
@@ -107,23 +126,26 @@ Configure the extension through VSCode settings:
 ```json
 {
   // Default theme for Mermaid diagrams
-  "mermaidLivePreview.theme": "default",
+  "mermaidViewer.theme": "default",
 
   // Automatically sync Mermaid theme with VSCode theme
-  "mermaidLivePreview.useVSCodeTheme": false,
+  "mermaidViewer.useVSCodeTheme": false,
 
   // Automatically refresh preview on document changes
-  "mermaidLivePreview.autoRefresh": true,
+  "mermaidViewer.autoRefresh": true,
 
   // Delay in milliseconds before refreshing preview after changes
-  "mermaidLivePreview.refreshDelay": 500,
+  "mermaidViewer.refreshDelay": 500,
 
   // Include frontmatter when copying from standalone .mmd/.mermaid files
-  "mermaidLivePreview.copy.includeFrontMatter": true,
+  "mermaidViewer.copy.includeFrontMatter": true,
 
   // Template used when copying with wrapper. Use {{mermaid-code}} as the placeholder.
   // Example for Azure DevOps:
-  "mermaidLivePreview.copy.wrapper": ":::mermaid\n{{mermaid-code}}\n:::"
+  "mermaidViewer.copy.wrapper": ":::mermaid\n{{mermaid-code}}\n:::",
+
+  // Show a warning squiggle when a Mermaid diagram is not formatted
+  "mermaidViewer.format.diagnostics": true
 }
 ```
 
@@ -145,7 +167,20 @@ graph TD
 - `Mermaid Viewer: Open Preview to the Side` - Same preview behavior, but always opens in the column beside the editor for live editing.
 - `Mermaid Viewer: Preview Diagram Here` - Focuses only the Mermaid block at the current cursor (or the CodeLens target) and keeps that single-diagram panel in sync while you type.
 - `Mermaid Viewer: Copy` - Copies the raw Mermaid source code for the diagram at the current cursor position.
-- `Mermaid Viewer: Copy with Wrapper` - Copies the diagram code wrapped in the template from `mermaidLivePreview.copy.wrapper`. Also available via right-click context menu.
+- `Mermaid Viewer: Copy with Wrapper` - Copies the diagram code wrapped in the template from `mermaidViewer.copy.wrapper`. Also available via right-click context menu.
+- `Mermaid Viewer: Format Diagram` - Normalizes indentation and whitespace for the diagram at the cursor (Markdown) or the whole file (`.mmd`/`.mermaid`). Standalone files also respond to the built-in *Format Document* command.
+
+### Format on Save
+
+Formatting is also exposed as a `source.fixAll` code action, so you can format every Mermaid diagram in a file automatically on save (including diagrams embedded in Markdown):
+
+```json
+"editor.codeActionsOnSave": {
+  "source.fixAll.mermaidViewer": "explicit"
+}
+```
+
+For standalone `.mmd`/`.mermaid` files you can alternatively use `"editor.formatOnSave": true`.
 
 ## Requirements
 
@@ -162,12 +197,12 @@ graph TD
 
 This extension contributes the following settings:
 
-* `mermaidLivePreview.theme`: Choose the default Mermaid theme
-* `mermaidLivePreview.useVSCodeTheme`: Sync theme with VSCode
-* `mermaidLivePreview.autoRefresh`: Enable/disable auto-refresh
-* `mermaidLivePreview.refreshDelay`: Set refresh delay in milliseconds
-* `mermaidLivePreview.copy.includeFrontMatter`: Include frontmatter when copying from standalone `.mmd`/`.mermaid` files (default: `true`)
-* `mermaidLivePreview.copy.wrapper`: Template applied by "Copy with Wrapper". Use `{{mermaid-code}}` as the placeholder (default: `{{mermaid-code}}`)
+* `mermaidViewer.theme`: Choose the default Mermaid theme
+* `mermaidViewer.useVSCodeTheme`: Sync theme with VSCode
+* `mermaidViewer.autoRefresh`: Enable/disable auto-refresh
+* `mermaidViewer.refreshDelay`: Set refresh delay in milliseconds
+* `mermaidViewer.copy.includeFrontMatter`: Include frontmatter when copying from standalone `.mmd`/`.mermaid` files (default: `true`)
+* `mermaidViewer.copy.wrapper`: Template applied by "Copy with Wrapper". Use `{{mermaid-code}}` as the placeholder (default: `{{mermaid-code}}`)
 
 ## Contributing
 

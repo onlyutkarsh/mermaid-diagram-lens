@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import { MermaidFoldingProvider } from './foldingProvider';
 import {
+	findMermaidFormatIssues,
+	formatMermaidCode,
+	formatMermaidDocument,
+} from './formatter';
+import {
 	createMarkdownItPlugin,
 	type MarkdownItLike,
 	registerMarkdownPlugin,
@@ -74,6 +79,117 @@ function getMermaidBlockAtLine(
 	return undefined;
 }
 
+type MermaidBlockRange = {
+	fullRange: vscode.Range;
+	codeRange: vscode.Range;
+	code: string;
+};
+
+function collectMermaidBlockRanges(
+	document: vscode.TextDocument,
+): MermaidBlockRange[] {
+	const text = document.getText();
+
+	const patterns: { block: RegExp; open: RegExp }[] = [
+		{
+			block: /```mermaid[^\S\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)?```/g,
+			open: /^```mermaid[^\S\r\n]*\r?\n/,
+		},
+		{
+			block: /:::\s*mermaid\s*\r?\n([\s\S]*?)\r?\n:::/g,
+			open: /^:::\s*mermaid\s*\r?\n/,
+		},
+	];
+
+	const blocks: MermaidBlockRange[] = [];
+	for (const { block, open } of patterns) {
+		let match: RegExpExecArray | null = block.exec(text);
+		while (match !== null) {
+			const inner = match[1] ?? '';
+			const openLength = match[0].match(open)?.[0].length ?? 0;
+			const innerStart = match.index + openLength;
+			blocks.push({
+				fullRange: new vscode.Range(
+					document.positionAt(match.index),
+					document.positionAt(match.index + match[0].length),
+				),
+				codeRange: new vscode.Range(
+					document.positionAt(innerStart),
+					document.positionAt(innerStart + inner.length),
+				),
+				code: inner,
+			});
+			match = block.exec(text);
+		}
+	}
+	return blocks;
+}
+
+function findMermaidBlockRangeAtLine(
+	document: vscode.TextDocument,
+	line: number,
+): MermaidBlockRange | undefined {
+	return collectMermaidBlockRanges(document).find(
+		(b) => line >= b.fullRange.start.line && line <= b.fullRange.end.line,
+	);
+}
+
+// All per-line formatting issues in the document, mapped to absolute document
+// line numbers. Used for diagnostics (squiggles), the per-issue "Fix" CodeLens,
+// and the single-line fix command.
+function collectDocumentFormatIssues(
+	document: vscode.TextDocument,
+): { line: number; expected: string }[] {
+	if (document.languageId === 'mermaid') {
+		return findMermaidFormatIssues(document.getText());
+	}
+
+	const issues: { line: number; expected: string }[] = [];
+	for (const block of collectMermaidBlockRanges(document)) {
+		const base = block.codeRange.start.line;
+		for (const issue of findMermaidFormatIssues(block.code)) {
+			issues.push({ line: base + issue.line, expected: issue.expected });
+		}
+	}
+	return issues;
+}
+
+// A WorkspaceEdit that fully formats every Mermaid diagram in the document, or
+// undefined if nothing needs changing. Backs the source.fixAll action used by
+// editor.codeActionsOnSave.
+function buildFormatAllEdit(
+	document: vscode.TextDocument,
+): vscode.WorkspaceEdit | undefined {
+	const edit = new vscode.WorkspaceEdit();
+	let changed = false;
+
+	if (document.languageId === 'mermaid') {
+		const text = document.getText();
+		const formatted = formatMermaidDocument(text);
+		if (formatted !== text) {
+			edit.replace(
+				document.uri,
+				new vscode.Range(
+					document.positionAt(0),
+					document.positionAt(text.length),
+				),
+				formatted,
+			);
+			changed = true;
+		}
+	} else {
+		for (const block of collectMermaidBlockRanges(document)) {
+			const formatted = formatMermaidCode(block.code);
+			if (formatted !== block.code) {
+				edit.replace(document.uri, block.codeRange, formatted);
+				changed = true;
+			}
+		}
+	}
+
+	return changed ? edit : undefined;
+}
+
 function stripStandaloneMermaidFrontMatter(text: string): string {
 	const normalizedText = text.trim();
 	if (!normalizedText.startsWith('---')) {
@@ -126,18 +242,25 @@ class MermaidCodeLensProvider implements vscode.CodeLensProvider {
 
 			const previewCommand: vscode.Command = {
 				title: 'Preview',
-				command: 'mermaidLivePreview.showPreviewToSide',
+				command: 'mermaidViewer.showPreviewToSide',
 				arguments: [],
 			};
 
 			const copyCommand: vscode.Command = {
 				title: 'Copy',
-				command: 'mermaidLivePreview.copyDiagramCode',
+				command: 'mermaidViewer.copyDiagramCode',
+				arguments: [document.uri],
+			};
+
+			const formatCommand: vscode.Command = {
+				title: 'Format',
+				command: 'mermaidViewer.formatDiagram',
 				arguments: [document.uri],
 			};
 
 			lenses.push(new vscode.CodeLens(range, previewCommand));
 			lenses.push(new vscode.CodeLens(range, copyCommand));
+			lenses.push(new vscode.CodeLens(range, formatCommand));
 			return lenses;
 		}
 
@@ -147,21 +270,105 @@ class MermaidCodeLensProvider implements vscode.CodeLensProvider {
 			const range = new vscode.Range(position, position);
 			const command: vscode.Command = {
 				title: 'Preview',
-				command: 'mermaidLivePreview.showDiagramAtPosition',
+				command: 'mermaidViewer.showDiagramAtPosition',
 				arguments: [document.uri, line],
 			};
 
 			const copyCommand: vscode.Command = {
 				title: 'Copy',
-				command: 'mermaidLivePreview.copyDiagramCode',
+				command: 'mermaidViewer.copyDiagramCode',
+				arguments: [document.uri, line],
+			};
+
+			const formatCommand: vscode.Command = {
+				title: 'Format',
+				command: 'mermaidViewer.formatDiagram',
 				arguments: [document.uri, line],
 			};
 
 			lenses.push(new vscode.CodeLens(range, command));
 			lenses.push(new vscode.CodeLens(range, copyCommand));
+			lenses.push(new vscode.CodeLens(range, formatCommand));
 		}
 
 		return lenses;
+	}
+}
+
+// Code actions for formatting:
+//  - a source.fixAll action that formats every diagram in the document, so it
+//    can be enabled on save via editor.codeActionsOnSave; and
+//  - per-line Quick Fixes on the formatting squiggles (lightbulb).
+class MermaidFormatCodeActionProvider implements vscode.CodeActionProvider {
+	static readonly fixAllKind =
+		vscode.CodeActionKind.SourceFixAll.append('mermaidViewer');
+
+	static readonly providedCodeActionKinds = [
+		vscode.CodeActionKind.QuickFix,
+		MermaidFormatCodeActionProvider.fixAllKind,
+	];
+
+	provideCodeActions(
+		document: vscode.TextDocument,
+		range: vscode.Range | vscode.Selection,
+		context: vscode.CodeActionContext,
+	): vscode.CodeAction[] {
+		const actions: vscode.CodeAction[] = [];
+
+		// Source fix-all: only when a source action is requested (on save or the
+		// "Source Action…" menu), so we don't compute edits for the lightbulb.
+		if (context.only?.intersects(MermaidFormatCodeActionProvider.fixAllKind)) {
+			const edit = buildFormatAllEdit(document);
+			if (edit) {
+				const fixAll = new vscode.CodeAction(
+					'Format all Mermaid diagrams',
+					MermaidFormatCodeActionProvider.fixAllKind,
+				);
+				fixAll.edit = edit;
+				actions.push(fixAll);
+			}
+		}
+
+		// Quick Fixes tied to the squiggles.
+		const ourDiagnostics = context.diagnostics.filter(
+			(d) => d.source === 'Mermaid Viewer' && d.code === 'unformatted',
+		);
+		const seenLines = new Set<number>();
+		for (const diagnostic of ourDiagnostics) {
+			const line = diagnostic.range.start.line;
+			if (seenLines.has(line)) {
+				continue;
+			}
+			seenLines.add(line);
+
+			const fix = new vscode.CodeAction(
+				'Fix formatting on this line',
+				vscode.CodeActionKind.QuickFix,
+			);
+			fix.diagnostics = [diagnostic];
+			fix.command = {
+				title: 'Fix formatting on this line',
+				command: 'mermaidViewer.fixFormatIssueAtLine',
+				arguments: [document.uri, line],
+			};
+			actions.push(fix);
+		}
+
+		if (ourDiagnostics.length > 0) {
+			const formatAll = new vscode.CodeAction(
+				'Format Mermaid diagram',
+				vscode.CodeActionKind.QuickFix,
+			);
+			formatAll.diagnostics = ourDiagnostics;
+			formatAll.command = {
+				title: 'Format Mermaid diagram',
+				command: 'mermaidViewer.formatDiagram',
+				arguments: [document.uri, range.start.line],
+			};
+			actions.push(formatAll);
+		}
+
+		return actions;
 	}
 }
 
@@ -276,7 +483,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	const configChangeListener = vscode.workspace.onDidChangeConfiguration(
 		(event) => {
-			if (event.affectsConfiguration('mermaidLivePreview.previewAppearance')) {
+			if (event.affectsConfiguration('mermaidViewer.previewAppearance')) {
 				if (MermaidPreviewPanel.consumeSuppressedAppearanceRefresh()) {
 					return;
 				}
@@ -307,10 +514,48 @@ export async function activate(context: vscode.ExtensionContext) {
 			],
 			foldingProvider,
 		),
+		vscode.languages.registerCodeActionsProvider(
+			[
+				{ language: 'markdown', scheme: 'file' },
+				{ language: 'mermaid', scheme: 'file' },
+				{ language: 'mermaid', scheme: 'untitled' },
+			],
+			new MermaidFormatCodeActionProvider(),
+			{
+				providedCodeActionKinds:
+					MermaidFormatCodeActionProvider.providedCodeActionKinds,
+			},
+		),
+		vscode.languages.registerDocumentFormattingEditProvider(
+			[
+				{ language: 'mermaid', scheme: 'file' },
+				{ language: 'mermaid', scheme: 'untitled' },
+			],
+			{
+				provideDocumentFormattingEdits(document) {
+					const text = document.getText();
+					const formatted = formatMermaidDocument(text);
+					const changed = formatted !== text;
+					logger.logInfo('Format Document triggered for Mermaid file', {
+						source: 'documentFormattingProvider',
+						uri: document.uri.toString(),
+						changed,
+					});
+					if (!changed) {
+						return [];
+					}
+					const fullRange = new vscode.Range(
+						document.positionAt(0),
+						document.positionAt(text.length),
+					);
+					return [vscode.TextEdit.replace(fullRange, formatted)];
+				},
+			},
+		),
 	);
 
 	const copyDiagramCodeCommand = vscode.commands.registerCommand(
-		'mermaidLivePreview.copyDiagramCode',
+		'mermaidViewer.copyDiagramCode',
 		async (uri: vscode.Uri | undefined, line: number | undefined) => {
 			try {
 				let document: vscode.TextDocument | undefined;
@@ -362,7 +607,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					}
 				}
 
-				const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+				const config = vscode.workspace.getConfiguration('mermaidViewer');
 				const includeFrontMatter = config.get<boolean>(
 					'copy.includeFrontMatter',
 					true,
@@ -404,7 +649,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	const copyDiagramCodeWithWrapperCommand = vscode.commands.registerCommand(
-		'mermaidLivePreview.copyDiagramCodeWithWrapper',
+		'mermaidViewer.copyDiagramCodeWithWrapper',
 		async (uri: vscode.Uri | undefined, line: number | undefined) => {
 			try {
 				let document: vscode.TextDocument | undefined;
@@ -460,7 +705,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					}
 				}
 
-				const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+				const config = vscode.workspace.getConfiguration('mermaidViewer');
 				const includeFrontMatter = config.get<boolean>(
 					'copy.includeFrontMatter',
 					true,
@@ -534,9 +779,157 @@ export async function activate(context: vscode.ExtensionContext) {
 		},
 	);
 
+	const formatDiagramCommand = vscode.commands.registerCommand(
+		'mermaidViewer.formatDiagram',
+		async (uri: vscode.Uri | undefined, line: number | undefined) => {
+			try {
+				logger.logInfo('Format Diagram command triggered', {
+					source: 'formatDiagramCommand',
+					uri: uri?.toString(),
+					line,
+				});
+
+				let document: vscode.TextDocument | undefined;
+				let targetLine = line;
+
+				if (uri) {
+					document = await vscode.workspace.openTextDocument(uri);
+				} else if (vscode.window.activeTextEditor) {
+					document = vscode.window.activeTextEditor.document;
+					if (typeof targetLine !== 'number') {
+						targetLine = vscode.window.activeTextEditor.selection.active.line;
+					}
+				}
+
+				if (!document) {
+					logger.logError('formatDiagram could not resolve a document');
+					vscode.window.showErrorMessage(
+						'Unable to format Mermaid diagram: no document context available.',
+					);
+					return;
+				}
+
+				if (
+					document.languageId !== 'markdown' &&
+					document.languageId !== 'mermaid'
+				) {
+					vscode.window.showInformationMessage(
+						'Mermaid Viewer only works with Markdown and Mermaid files.',
+					);
+					return;
+				}
+
+				let range: vscode.Range;
+				let code: string;
+				let formatted: string;
+				if (document.languageId === 'mermaid') {
+					code = document.getText();
+					range = new vscode.Range(
+						document.positionAt(0),
+						document.positionAt(code.length),
+					);
+					formatted = formatMermaidDocument(code);
+				} else {
+					if (typeof targetLine !== 'number') {
+						vscode.window.showErrorMessage(
+							'Unable to format Mermaid diagram: missing line information.',
+						);
+						return;
+					}
+					const block = findMermaidBlockRangeAtLine(document, targetLine);
+					if (!block) {
+						vscode.window.showInformationMessage(
+							'No Mermaid diagram found at this location to format.',
+						);
+						return;
+					}
+					range = block.codeRange;
+					code = block.code;
+					formatted = formatMermaidCode(code);
+				}
+
+				if (formatted === code) {
+					vscode.window.showInformationMessage(
+						'Mermaid diagram is already formatted.',
+					);
+					return;
+				}
+
+				const edit = new vscode.WorkspaceEdit();
+				edit.replace(document.uri, range, formatted);
+				const applied = await vscode.workspace.applyEdit(edit);
+				if (!applied) {
+					vscode.window.showErrorMessage('Unable to format Mermaid diagram.');
+					return;
+				}
+
+				logger.logInfo('Formatted Mermaid diagram', {
+					command: 'formatDiagram',
+					languageId: document.languageId,
+				});
+				vscode.window.showInformationMessage('Mermaid diagram formatted.');
+			} catch (error) {
+				logger.logError(
+					'Failed to format Mermaid diagram',
+					error instanceof Error ? error : new Error(String(error)),
+				);
+				vscode.window.showErrorMessage(
+					'Unable to format Mermaid diagram. See output for details.',
+				);
+			}
+		},
+	);
+
+	const fixFormatIssueCommand = vscode.commands.registerCommand(
+		'mermaidViewer.fixFormatIssueAtLine',
+		async (uri: vscode.Uri | undefined, line: number | undefined) => {
+			try {
+				if (!uri || typeof line !== 'number') {
+					logger.logError('fixFormatIssueAtLine missing arguments', { line });
+					return;
+				}
+
+				const document = await vscode.workspace.openTextDocument(uri);
+				const issue = collectDocumentFormatIssues(document).find(
+					(i) => i.line === line,
+				);
+
+				if (!issue || line >= document.lineCount) {
+					vscode.window.showInformationMessage(
+						'No formatting issue to fix on this line.',
+					);
+					return;
+				}
+
+				logger.logInfo('Fix formatting issue triggered', {
+					source: 'fixFormatIssueCommand',
+					uri: uri.toString(),
+					line,
+				});
+
+				const edit = new vscode.WorkspaceEdit();
+				edit.replace(document.uri, document.lineAt(line).range, issue.expected);
+				const applied = await vscode.workspace.applyEdit(edit);
+				if (!applied) {
+					vscode.window.showErrorMessage(
+						'Unable to fix Mermaid formatting issue.',
+					);
+				}
+			} catch (error) {
+				logger.logError(
+					'Failed to fix Mermaid formatting issue',
+					error instanceof Error ? error : new Error(String(error)),
+				);
+				vscode.window.showErrorMessage(
+					'Unable to fix Mermaid formatting issue. See output for details.',
+				);
+			}
+		},
+	);
+
 	// Register command to show preview
 	const showPreviewCommand = vscode.commands.registerCommand(
-		'mermaidLivePreview.showPreview',
+		'mermaidViewer.showPreview',
 		() => {
 			const editor = vscode.window.activeTextEditor;
 			if (!editor) {
@@ -571,7 +964,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Register command to show preview to the side
 	const showPreviewToSideCommand = vscode.commands.registerCommand(
-		'mermaidLivePreview.showPreviewToSide',
+		'mermaidViewer.showPreviewToSide',
 		() => {
 			const editor = vscode.window.activeTextEditor;
 			if (!editor) {
@@ -608,7 +1001,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	const showDiagramAtPositionCommand = vscode.commands.registerCommand(
-		'mermaidLivePreview.showDiagramAtPosition',
+		'mermaidViewer.showDiagramAtPosition',
 		async (uri: vscode.Uri | undefined, line: number | undefined) => {
 			try {
 				let document: vscode.TextDocument | undefined;
@@ -674,12 +1067,65 @@ export async function activate(context: vscode.ExtensionContext) {
 		},
 	);
 
+	// Surface a warning (squiggle) when a Mermaid diagram is not formatted.
+	const formatDiagnostics =
+		vscode.languages.createDiagnosticCollection('mermaid-format');
+	context.subscriptions.push(formatDiagnostics);
+
+	const updateFormatDiagnostics = (document: vscode.TextDocument) => {
+		const isSupported =
+			document.languageId === 'markdown' || document.languageId === 'mermaid';
+		const config = vscode.workspace.getConfiguration('mermaidViewer');
+		if (!isSupported || !config.get<boolean>('format.diagnostics', true)) {
+			formatDiagnostics.delete(document.uri);
+			return;
+		}
+
+		const diagnostics: vscode.Diagnostic[] = [];
+		for (const issue of collectDocumentFormatIssues(document)) {
+			if (issue.line >= document.lineCount) {
+				continue;
+			}
+			const diagnostic = new vscode.Diagnostic(
+				document.lineAt(issue.line).range,
+				'Mermaid diagram line is not formatted.',
+				vscode.DiagnosticSeverity.Warning,
+			);
+			diagnostic.source = 'Mermaid Viewer';
+			diagnostic.code = 'unformatted';
+			diagnostics.push(diagnostic);
+		}
+
+		formatDiagnostics.set(document.uri, diagnostics);
+	};
+
+	for (const document of vscode.workspace.textDocuments) {
+		updateFormatDiagnostics(document);
+	}
+
+	const diagnosticsConfigSubscription =
+		vscode.workspace.onDidChangeConfiguration((event) => {
+			if (event.affectsConfiguration('mermaidViewer.format.diagnostics')) {
+				for (const document of vscode.workspace.textDocuments) {
+					updateFormatDiagnostics(document);
+				}
+			}
+		});
+
+	const openDocumentSubscription = vscode.workspace.onDidOpenTextDocument(
+		updateFormatDiagnostics,
+	);
+	const closeDocumentSubscription = vscode.workspace.onDidCloseTextDocument(
+		(document) => formatDiagnostics.delete(document.uri),
+	);
+
 	// Watch for document changes
 	const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
 		(e) => {
 			gutterDecorator?.updateForDocument(e.document);
+			updateFormatDiagnostics(e.document);
 
-			const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+			const config = vscode.workspace.getConfiguration('mermaidViewer');
 			const autoRefresh = config.get<boolean>('autoRefresh', true);
 
 			// Update if it's a markdown or mermaid file
@@ -698,6 +1144,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	const changeActiveEditorSubscription =
 		vscode.window.onDidChangeActiveTextEditor((editor) => {
 			gutterDecorator?.update(editor);
+
+			if (editor) {
+				updateFormatDiagnostics(editor.document);
+			}
 
 			// Update if it's a markdown or mermaid file
 			if (editor) {
@@ -749,6 +1199,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		showDiagramAtPositionCommand,
 		copyDiagramCodeCommand,
 		copyDiagramCodeWithWrapperCommand,
+		formatDiagramCommand,
+		fixFormatIssueCommand,
+		diagnosticsConfigSubscription,
+		openDocumentSubscription,
+		closeDocumentSubscription,
 		changeDocumentSubscription,
 		changeActiveEditorSubscription,
 		visibleEditorsSubscription,
