@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20.x"
           cache: npm
@@ -150,7 +150,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.version }}
           name: Release v${{ inputs.version }}
