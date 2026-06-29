@@ -5,3 +5,5 @@ out
 .claude
 # Environment variables
 .env
+prd.md
+AGENTS.md

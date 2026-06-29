@@ -23,7 +23,7 @@ type WebviewState = {
 };
 
 export class MermaidPreviewPanel {
-	public static readonly viewType = 'mermaidLivePreview';
+	public static readonly viewType = 'mermaidViewer';
 	private static readonly _panels = new Set<MermaidPreviewPanel>();
 	private static _suppressNextAppearanceRefresh = false;
 	private readonly _panel: vscode.WebviewPanel;
@@ -163,7 +163,7 @@ export class MermaidPreviewPanel {
 		lineNumber?: number,
 	): string {
 		const label = MermaidPreviewPanel._deriveDocumentLabel(document);
-		const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+		const config = vscode.workspace.getConfiguration('mermaidViewer');
 		const titleStyle = config.get<string>('panelTitleStyle', 'full');
 		const useFileNameOnly = titleStyle === 'fileNameOnly';
 
@@ -387,7 +387,7 @@ export class MermaidPreviewPanel {
 		// Listen for configuration changes to update panel title
 		vscode.workspace.onDidChangeConfiguration(
 			(e) => {
-				if (e.affectsConfiguration('mermaidLivePreview.panelTitleStyle')) {
+				if (e.affectsConfiguration('mermaidViewer.panelTitleStyle')) {
 					this._updatePanelTitle();
 				}
 			},
@@ -462,7 +462,7 @@ export class MermaidPreviewPanel {
 		this._currentDocument = document;
 
 		// Get refresh delay from config
-		const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+		const config = vscode.workspace.getConfiguration('mermaidViewer');
 		const delay = config.get<number>('refreshDelay', 500);
 		const maxDebounceTime = 3000; // Maximum 3 seconds
 
@@ -578,7 +578,7 @@ export class MermaidPreviewPanel {
 	private async _handleThemeChange(theme: string) {
 		try {
 			// Persist the selection. The webview already re-renders immediately.
-			const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+			const config = vscode.workspace.getConfiguration('mermaidViewer');
 			await config.update(
 				'useVSCodeTheme',
 				false,
@@ -599,7 +599,7 @@ export class MermaidPreviewPanel {
 	private async _saveThemePreference(theme: string) {
 		try {
 			// Save to workspace or global settings
-			const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+			const config = vscode.workspace.getConfiguration('mermaidViewer');
 			await config.update('theme', theme, vscode.ConfigurationTarget.Global);
 		} catch (error) {
 			// Silently fail - non-critical operation, user already has visual feedback
@@ -612,7 +612,7 @@ export class MermaidPreviewPanel {
 
 	private async _handleAppearanceChange(appearance: PreviewAppearance) {
 		try {
-			const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+			const config = vscode.workspace.getConfiguration('mermaidViewer');
 			MermaidPreviewPanel.suppressNextAppearanceRefresh();
 			await config.update(
 				'previewAppearance',
@@ -965,7 +965,7 @@ export class MermaidPreviewPanel {
 		theme: string;
 		appearance: PreviewAppearance;
 	} {
-		const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+		const config = vscode.workspace.getConfiguration('mermaidViewer');
 		const useVSCodeTheme = config.get<boolean>('useVSCodeTheme', false);
 		const configuredTheme = config.get<string>('theme', 'default');
 		const appearance = config.get<PreviewAppearance>(
@@ -1050,7 +1050,7 @@ export class MermaidPreviewPanel {
 
 			const docId = documentId ?? 'unknown';
 			const nonce = this._generateNonce();
-			const config = vscode.workspace.getConfiguration('mermaidLivePreview');
+			const config = vscode.workspace.getConfiguration('mermaidViewer');
 			const renderTimeout = config.get<number>('renderTimeout', 0);
 
 			return `<!DOCTYPE html>
