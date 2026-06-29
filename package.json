@@ -239,7 +239,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
-    "@types/node": "^25.9.1",
+    "@types/node": "^18.19.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.9.1",
     "conventional-changelog-cli": "^5.0.0",
