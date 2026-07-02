@@ -1,0 +1,44 @@
+{
+  "biome.enabled": true,
+  "biome.requireConfiguration": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.biome": "explicit"
+  },
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "biomejs.biome",
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "chat.tools.terminal.autoApprove": {
+    "gh": true
+  },
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Follow the Conventional Commits specification. Format: <type>(<scope>): <subject>. Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert. Example: feat(auth): add OAuth2 PKCE flow support"
+    },
+    {
+      "text": "Subject must be imperative mood, sentence case, no period, max 72 characters. Never mention file names, line numbers, or implementation details. Never use vague subjects like 'fix bug', 'update code', 'wip', or 'misc changes'."
+    },
+    {
+      "text": "Derive scope from the primary area changed: e.g. api, ui, db, auth, infra, config, messaging, pipeline. Omit scope only for cross-cutting changes."
+    },
+    {
+      "text": "Include a body for non-trivial changes, separated from the subject by a blank line, wrapped at 72 characters. The body must explain WHY — the business or technical motivation — not WHAT (the diff shows that). If the reason cannot be inferred from the diff or context, write a placeholder: '# why: <fill in reason>' so the author is prompted before committing."
+    },
+    {
+      "text": "If the change closes a work item, append a footer: Closes #<id> or Refs #<id>. For breaking changes, add BREAKING CHANGE: <description> in the footer."
+    },
+    {
+      "text": "If multiple logical changes are staged, prefer splitting into separate commits. If they must be combined, list each change as a bullet in the body."
+    }
+  ],
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  }
+}
