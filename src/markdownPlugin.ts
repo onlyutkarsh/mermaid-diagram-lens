@@ -5,7 +5,6 @@
 
 import type * as vscode from 'vscode';
 
-const mermaidLanguageId = 'mermaid';
 const mermaidPreviewClass = 'mermaid-live-preview';
 const containerTokenName = 'mermaidContainer';
 

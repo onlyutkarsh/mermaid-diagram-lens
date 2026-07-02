@@ -37,6 +37,8 @@ A VSCode extension that gives you a powerful viewer for Mermaid diagrams with in
    - Right-click in the editor and select "Mermaid Viewer: Open Preview"
    - Use Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and search for "Mermaid Viewer: Open Preview"
    - For side-by-side view: "Mermaid Viewer: Open Preview to the Side"
+   - For a separate floating window: "Mermaid Viewer: Open Preview in New Window"
+3. The toolbar/title icon uses "Open Preview to the Side" behavior by default; set `mermaidViewer.defaultPreviewLocation` to `newWindow` to make it open in a new window instead
 
 ### Changing Themes
 
@@ -137,6 +139,9 @@ Configure the extension through VSCode settings:
   // Delay in milliseconds before refreshing preview after changes
   "mermaidViewer.refreshDelay": 500,
 
+  // Where the toolbar icon opens the preview: "side" or "newWindow"
+  "mermaidViewer.defaultPreviewLocation": "side",
+
   // Include frontmatter when copying from standalone .mmd/.mermaid files
   "mermaidViewer.copy.includeFrontMatter": true,
 
@@ -165,6 +170,7 @@ graph TD
 
 - `Mermaid Viewer: Open Preview` - Shows Mermaid diagrams from the active Markdown or Mermaid file in the current editor column.
 - `Mermaid Viewer: Open Preview to the Side` - Same preview behavior, but always opens in the column beside the editor for live editing.
+- `Mermaid Viewer: Open Preview in New Window` - Opens the preview in its own floating VSCode window, separate from the main editor window.
 - `Mermaid Viewer: Preview Diagram Here` - Focuses only the Mermaid block at the current cursor (or the CodeLens target) and keeps that single-diagram panel in sync while you type.
 - `Mermaid Viewer: Copy` - Copies the raw Mermaid source code for the diagram at the current cursor position.
 - `Mermaid Viewer: Copy with Wrapper` - Copies the diagram code wrapped in the template from `mermaidViewer.copy.wrapper`. Also available via right-click context menu.

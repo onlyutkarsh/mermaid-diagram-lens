@@ -83,6 +83,14 @@
         }
       },
       {
+        "command": "mermaidViewer.showPreviewInNewWindow",
+        "title": "Mermaid Viewer: Open Preview in New Window",
+        "icon": {
+          "light": "images/mermaid-gutter.svg",
+          "dark": "images/mermaid-gutter.svg"
+        }
+      },
+      {
         "command": "mermaidViewer.showDiagramAtPosition",
         "title": "Mermaid Viewer: Preview Diagram Here"
       },
@@ -202,6 +210,19 @@
           "default": true,
           "description": "Include frontmatter when copying Mermaid code from standalone .mmd/.mermaid files"
         },
+        "mermaidViewer.defaultPreviewLocation": {
+          "type": "string",
+          "default": "side",
+          "enum": [
+            "side",
+            "newWindow"
+          ],
+          "enumDescriptions": [
+            "Open preview beside the editor (default)",
+            "Open preview in a new floating window"
+          ],
+          "description": "Where the toolbar icon opens the Mermaid preview. Individual commands are always available in the Command Palette."
+        },
         "mermaidViewer.copy.wrapper": {
           "type": "string",
           "default": "{{mermaid-code}}",
@@ -251,9 +272,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@mermaid-js/layout-elk": "^0.2.1",
+    "@mermaid-js/layout-elk": "^0.2.2",
     "@vscode/codicons": "^0.0.45",
-    "mermaid": "^11.15.0"
+    "mermaid": "^11.16.0"
   },
   "overrides": {
     "@conventional-changelog/git-client": "^2.0.0"

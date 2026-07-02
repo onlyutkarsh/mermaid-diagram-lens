@@ -965,7 +965,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Register command to show preview to the side
 	const showPreviewToSideCommand = vscode.commands.registerCommand(
 		'mermaidViewer.showPreviewToSide',
-		() => {
+		async () => {
 			const editor = vscode.window.activeTextEditor;
 			if (!editor) {
 				logger.logWarning('showPreviewToSide invoked without an active editor');
@@ -992,10 +992,67 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
+			const config = vscode.workspace.getConfiguration('mermaidViewer');
+			const location = config.get<string>('defaultPreviewLocation', 'side');
+
+			if (location === 'newWindow') {
+				MermaidPreviewPanel.createOrShow(
+					context.extensionUri,
+					editor.document,
+					vscode.ViewColumn.Active,
+				);
+				await vscode.commands.executeCommand(
+					'workbench.action.moveEditorToNewWindow',
+				);
+			} else {
+				MermaidPreviewPanel.createOrShow(
+					context.extensionUri,
+					editor.document,
+					vscode.ViewColumn.Beside,
+				);
+			}
+		},
+	);
+
+	// Register command to show preview in a new floating window
+	const showPreviewInNewWindowCommand = vscode.commands.registerCommand(
+		'mermaidViewer.showPreviewInNewWindow',
+		async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				logger.logWarning(
+					'showPreviewInNewWindow invoked without an active editor',
+				);
+				vscode.window.showInformationMessage(
+					'Open a Markdown or Mermaid file containing diagrams to preview them.',
+				);
+				return;
+			}
+
+			if (
+				editor.document.languageId !== 'markdown' &&
+				editor.document.languageId !== 'mermaid'
+			) {
+				logger.logWarning(
+					'showPreviewInNewWindow invoked for unsupported document',
+					{
+						languageId: editor.document.languageId,
+						uri: editor.document.uri.toString(),
+					},
+				);
+				vscode.window.showInformationMessage(
+					'Mermaid Viewer only works with Markdown and Mermaid files.',
+				);
+				return;
+			}
+
 			MermaidPreviewPanel.createOrShow(
 				context.extensionUri,
 				editor.document,
-				vscode.ViewColumn.Beside,
+				vscode.ViewColumn.Active,
+			);
+			await vscode.commands.executeCommand(
+				'workbench.action.moveEditorToNewWindow',
 			);
 		},
 	);
@@ -1196,6 +1253,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		showPreviewCommand,
 		showPreviewToSideCommand,
+		showPreviewInNewWindowCommand,
 		showDiagramAtPositionCommand,
 		copyDiagramCodeCommand,
 		copyDiagramCodeWithWrapperCommand,
