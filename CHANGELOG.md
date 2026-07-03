@@ -1,4 +1,13 @@
-# 2.1.0 (2026-07-02)
+## [2.1.1](https://github.com/onlyutkarsh/mermaid-viewer/compare/v2.1.0...v2.1.1) (2026-07-03)
+
+
+### Features
+
+* **preview:** enhance diagram error handling and rendering ([5b0650d](https://github.com/onlyutkarsh/mermaid-viewer/commit/5b0650d0f1f1b867e2831a6a22d3baddfc9e919a))
+
+
+
+## [2.1.0](https://github.com/onlyutkarsh/mermaid-viewer/compare/24527279f9c51decac028c75ae82dcbe5b8c481e...v2.1.0) (2026-07-02)
 
 
 ### Bug Fixes
