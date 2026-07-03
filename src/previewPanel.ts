@@ -1172,6 +1172,7 @@ export class MermaidPreviewPanel {
             startOnLoad: false,
             theme: currentTheme,
             securityLevel: 'loose',
+            suppressErrorRendering: true,
             flowchart: { useMaxWidth: true, htmlLabels: true }
         });
 
@@ -1397,7 +1398,7 @@ export class MermaidPreviewPanel {
         };
 
         function startPan(event) {
-            if (event.target.closest('.dropdown') || event.target.closest('.toolbar')) {
+            if (event.target.closest('.dropdown') || event.target.closest('.toolbar') || event.target.closest('.diagram-error')) {
                 return;
             }
 
@@ -1610,6 +1611,7 @@ export class MermaidPreviewPanel {
                 startOnLoad: false,
                 theme: newTheme,
                 securityLevel: 'loose',
+                suppressErrorRendering: true,
                 flowchart: { useMaxWidth: true, htmlLabels: true }
             });
             renderAllDiagrams();
@@ -2061,6 +2063,13 @@ export class MermaidPreviewPanel {
             });
         });
 
+        // Serialize diagram updates so overlapping calls to updateDiagramsInPlace
+        // can never race: Mermaid's render() relies on shared/global parser state
+        // (see the "Render diagrams sequentially" comment above), so if an older,
+        // slower render (e.g. one that ends in a parse error) settles after a
+        // newer, already-applied render, it must not be allowed to clobber the DOM.
+        let diagramUpdateChain = Promise.resolve();
+
         // Listen for messages from the extension
         window.addEventListener('message', (event) => {
             const message = event.data;
@@ -2071,7 +2080,9 @@ export class MermaidPreviewPanel {
             }
 
             if (message.command === 'updateDiagrams') {
-                updateDiagramsInPlace(message.diagrams);
+                diagramUpdateChain = diagramUpdateChain.then(
+                    () => updateDiagramsInPlace(message.diagrams)
+                ).catch(() => {});
                 return;
             }
 
@@ -2522,6 +2533,15 @@ export class MermaidPreviewPanel {
             cursor: grabbing !important;
         }
 
+        #diagram-viewport .diagram-error,
+        #diagram-viewport .diagram-error *,
+        #diagram-stage .diagram-error,
+        #diagram-stage .diagram-error *,
+        #diagrams-container .diagram-error,
+        #diagrams-container .diagram-error * {
+            cursor: text !important;
+        }
+
         .dropdown {
             position: relative;
         }
@@ -2632,6 +2652,8 @@ export class MermaidPreviewPanel {
             border-radius: 6px;
             max-width: 720px;
             margin: 0 auto;
+            user-select: text;
+            cursor: text;
         }
 
         .diagram-error__title {
