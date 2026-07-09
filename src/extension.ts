@@ -1176,11 +1176,30 @@ export async function activate(context: vscode.ExtensionContext) {
 		(document) => formatDiagnostics.delete(document.uri),
 	);
 
+	// Debounced diagnostics and gutter updates — avoid re-parsing the entire
+	// document on every keystroke.  The 300 ms delay collapses rapid edits into
+	// a single update while staying perceptually instant once typing pauses.
+	const pendingDiagnosticTimers = new Map<string, NodeJS.Timeout>();
+	const debouncedDiagnosticsAndGutter = (document: vscode.TextDocument) => {
+		const key = document.uri.toString();
+		const existing = pendingDiagnosticTimers.get(key);
+		if (existing) {
+			clearTimeout(existing);
+		}
+		pendingDiagnosticTimers.set(
+			key,
+			setTimeout(() => {
+				pendingDiagnosticTimers.delete(key);
+				gutterDecorator?.updateForDocument(document);
+				updateFormatDiagnostics(document);
+			}, 300),
+		);
+	};
+
 	// Watch for document changes
 	const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
 		(e) => {
-			gutterDecorator?.updateForDocument(e.document);
-			updateFormatDiagnostics(e.document);
+			debouncedDiagnosticsAndGutter(e.document);
 
 			const config = vscode.workspace.getConfiguration('mermaidViewer');
 			const autoRefresh = config.get<boolean>('autoRefresh', true);
@@ -1266,6 +1285,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		changeActiveEditorSubscription,
 		visibleEditorsSubscription,
 		selectionChangeSubscription,
+		{
+			dispose: () => {
+				for (const t of pendingDiagnosticTimers.values()) clearTimeout(t);
+			},
+		},
 	);
 
 	logger.logInfo('Mermaid Viewer extension activated successfully');
