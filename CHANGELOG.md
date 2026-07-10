@@ -1,3 +1,12 @@
+## [2.1.2](https://github.com/onlyutkarsh/mermaid-viewer/compare/v2.1.1...v2.1.2) (2026-07-10)
+
+
+### Performance Improvements
+
+* debounce diagnostics/gutter, remove redundant parse and verbose logging ([163d18b](https://github.com/onlyutkarsh/mermaid-viewer/commit/163d18bc0ebf94309dbf7be8d784a03e5c6fcbf8))
+
+
+
 ## [2.1.1](https://github.com/onlyutkarsh/mermaid-viewer/compare/v2.1.0...v2.1.1) (2026-07-03)
 
 
