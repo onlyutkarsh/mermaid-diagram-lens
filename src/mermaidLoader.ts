@@ -247,11 +247,6 @@ if (typeof window !== 'undefined') {
 			document.querySelectorAll<HTMLElement>(`.${MERMAID_PREVIEW_CLASS}`),
 		);
 		if (primary.length > 0) {
-			console.log(
-				'[ML] found',
-				primary.length,
-				`${MERMAID_PREVIEW_CLASS} element(s) via plugin`,
-			);
 			return primary;
 		}
 
@@ -385,7 +380,6 @@ if (typeof window !== 'undefined') {
 		const signal = currentController.signal;
 
 		const els = collectMermaidElements();
-		console.log('[ML] init: total elements to render:', els.length);
 
 		if (els.length === 0) {
 			return;
@@ -411,50 +405,21 @@ if (typeof window !== 'undefined') {
 				''
 			).trim();
 
-			console.log('[ML] source selection', {
-				index,
-				isAlreadyRendered,
-				hasDatasetSource: sourceFromDataset.length > 0,
-				datasetLength: sourceFromDataset.length,
-				textLength: sourceFromText.length,
-				using: sourceFromDataset
-					? 'dataset'
-					: !isAlreadyRendered && sourceFromText
-						? 'textContent'
-						: 'none',
-				hasRenderedBlock: el.querySelector('.mermaid-block') !== null,
-				className: el.className,
-			});
 			if (!source) {
-				console.log('[ML] skip empty source', { index, isAlreadyRendered });
 				return;
 			}
 
-			// Guard against re-parsing rendered SVG/CSS content when source attrs are missing.
-			// This can happen during markdown preview refresh cycles where DOM attributes
-			// are recreated and textContent contains rendered output instead of Mermaid code.
 			if (
 				source.startsWith('#mermaid-') ||
 				source.includes('@keyframes') ||
 				source.includes('.edge-animation-slow')
 			) {
-				console.warn('[ML] skipping non-source content for block', {
-					index,
-					isAlreadyRendered,
-					hasDatasetSource: sourceFromDataset.length > 0,
-					sourcePreview: source
-						.split('\n')
-						.slice(0, 2)
-						.join('\n')
-						.slice(0, 180),
-				});
 				return;
 			}
 			el.dataset.mermaidSource = source;
 
 			const id = `mermaid-${Date.now()}-${index}`;
 			try {
-				await mermaid.parse(source);
 				if (signal.aborted) {
 					return;
 				}
@@ -498,10 +463,6 @@ if (typeof window !== 'undefined') {
 		});
 
 		await Promise.all(renderPromises);
-		if (signal.aborted) {
-			return;
-		}
-		console.log('[ML] done');
 	}
 
 	window.addEventListener('vscode.markdown.updateContent', () => {
