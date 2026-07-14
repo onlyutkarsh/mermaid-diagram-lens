@@ -1,4 +1,4 @@
-name: Release to Marketplace
+name: Release
 
 on:
   workflow_dispatch:
@@ -8,11 +8,16 @@ on:
         required: true
         type: string
 
-run-name: Release v${{ inputs.version }}
+run-name: v${{ inputs.version }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.actor == 'onlyutkarsh'
     permissions:
       contents: write
@@ -75,19 +80,19 @@ jobs:
           # Normalize all version headers to use ## (consistent level 2 headers)
           sed -i 's/^# \(\[[0-9]\)/## \1/g' CHANGELOG.md
 
-      - name: Publish to Open VSX Registry
-        id: publish_ovsx
-        continue-on-error: true
-        run: npm run publish:ovsx
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
-
-      - name: Publish to VS Marketplace
-        id: publish_vsmarketplace
-        continue-on-error: true
-        run: npm run deploy
-        env:
-          VSCE_PAT: ${{ secrets.VS_MARKETPLACE_PAT }}
+      - parallel:
+          - name: Publish to Open VSX Registry
+            id: publish_ovsx
+            continue-on-error: true
+            run: npm run publish:ovsx
+            env:
+              OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          - name: Publish to VS Marketplace
+            id: publish_vsmarketplace
+            continue-on-error: true
+            run: npm run deploy
+            env:
+              VSCE_PAT: ${{ secrets.VS_MARKETPLACE_PAT }}
 
       - name: Check publishing results
         run: |
