@@ -56,6 +56,27 @@ export class MermaidPreviewPanel {
 		return MermaidPreviewPanel._panels.size > 0;
 	}
 
+	public static revealAny(viewColumn?: vscode.ViewColumn): boolean {
+		const [first] = MermaidPreviewPanel._panels;
+		if (!first) {
+			return false;
+		}
+		first._panel.reveal(viewColumn);
+		return true;
+	}
+
+	public static revealForDocument(
+		document: vscode.TextDocument,
+		viewColumn?: vscode.ViewColumn,
+	): boolean {
+		const panel = MermaidPreviewPanel._findMatchingPanel(document, 'all');
+		if (!panel) {
+			return false;
+		}
+		panel._panel.reveal(viewColumn);
+		return true;
+	}
+
 	public static suppressNextAppearanceRefresh(): void {
 		MermaidPreviewPanel._suppressNextAppearanceRefresh = true;
 	}
@@ -210,6 +231,12 @@ export class MermaidPreviewPanel {
 		document: vscode.TextDocument,
 		viewColumn: vscode.ViewColumn,
 	) {
+		const existing = MermaidPreviewPanel._findMatchingPanel(document, 'all');
+		if (existing) {
+			existing._panel.reveal(viewColumn);
+			return;
+		}
+
 		const title = MermaidPreviewPanel._buildPanelTitle(document, 'all');
 		const panel = MermaidPreviewPanel._createWebviewPanel(
 			extensionUri,
