@@ -1,3 +1,7 @@
+## [2.1.3](https://github.com/onlyutkarsh/mermaid-viewer/compare/v2.1.2...v2.1.3) (2026-07-28)
+
+
+
 ## [2.1.2](https://github.com/onlyutkarsh/mermaid-viewer/compare/v2.1.1...v2.1.2) (2026-07-10)
 
 
