@@ -933,16 +933,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		() => {
 			const editor = vscode.window.activeTextEditor;
 			if (!editor) {
-				// Preview panel (or something else) has focus — find a preview
-				// whose source file is still visible and activate it.
-				for (const visible of vscode.window.visibleTextEditors) {
-					if (MermaidPreviewPanel.revealForDocument(visible.document)) {
-						return;
-					}
-				}
-				if (MermaidPreviewPanel.revealAny()) {
-					return;
-				}
 				logger.logWarning('showPreview invoked without an active editor');
 				vscode.window.showInformationMessage(
 					'Open a Markdown or Mermaid file containing diagrams to preview them.',
@@ -978,21 +968,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		async () => {
 			const editor = vscode.window.activeTextEditor;
 			if (!editor) {
-				// Preview panel (or something else) has focus — find a preview
-				// whose source file is still visible and activate it.
-				for (const visible of vscode.window.visibleTextEditors) {
-					if (
-						MermaidPreviewPanel.revealForDocument(
-							visible.document,
-							vscode.ViewColumn.Beside,
-						)
-					) {
-						return;
-					}
-				}
-				if (MermaidPreviewPanel.revealAny(vscode.ViewColumn.Beside)) {
-					return;
-				}
 				logger.logWarning('showPreviewToSide invoked without an active editor');
 				vscode.window.showInformationMessage(
 					'Open a Markdown or Mermaid file containing diagrams to preview them.',

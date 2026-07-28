@@ -56,27 +56,6 @@ export class MermaidPreviewPanel {
 		return MermaidPreviewPanel._panels.size > 0;
 	}
 
-	public static revealAny(viewColumn?: vscode.ViewColumn): boolean {
-		const [first] = MermaidPreviewPanel._panels;
-		if (!first) {
-			return false;
-		}
-		first._panel.reveal(viewColumn);
-		return true;
-	}
-
-	public static revealForDocument(
-		document: vscode.TextDocument,
-		viewColumn?: vscode.ViewColumn,
-	): boolean {
-		const panel = MermaidPreviewPanel._findMatchingPanel(document, 'all');
-		if (!panel) {
-			return false;
-		}
-		panel._panel.reveal(viewColumn);
-		return true;
-	}
-
 	public static suppressNextAppearanceRefresh(): void {
 		MermaidPreviewPanel._suppressNextAppearanceRefresh = true;
 	}
