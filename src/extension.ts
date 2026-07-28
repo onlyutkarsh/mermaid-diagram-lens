@@ -554,6 +554,39 @@ export async function activate(context: vscode.ExtensionContext) {
 		),
 	);
 
+	const getActiveSupportedEditor = (
+		commandName: 'showPreview' | 'showPreviewToSide' | 'showPreviewInNewWindow',
+	): vscode.TextEditor | undefined => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			// Cross-platform guard:
+			// Do NOT fall back to visibleTextEditors/panel scans when no editor is
+			// active. Webview focus semantics differ by platform (notably Windows) and
+			// those fallbacks can activate a mismatched document preview.
+			logger.logWarning(`${commandName} invoked without an active editor`);
+			vscode.window.showInformationMessage(
+				'Open a Markdown or Mermaid file containing diagrams to preview them.',
+			);
+			return undefined;
+		}
+
+		if (
+			editor.document.languageId !== 'markdown' &&
+			editor.document.languageId !== 'mermaid'
+		) {
+			logger.logWarning(`${commandName} invoked for unsupported document`, {
+				languageId: editor.document.languageId,
+				uri: editor.document.uri.toString(),
+			});
+			vscode.window.showInformationMessage(
+				'Mermaid Viewer only works with Markdown and Mermaid files.',
+			);
+			return undefined;
+		}
+
+		return editor;
+	};
+
 	const copyDiagramCodeCommand = vscode.commands.registerCommand(
 		'mermaidViewer.copyDiagramCode',
 		async (uri: vscode.Uri | undefined, line: number | undefined) => {
@@ -931,36 +964,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const showPreviewCommand = vscode.commands.registerCommand(
 		'mermaidViewer.showPreview',
 		() => {
-			const editor = vscode.window.activeTextEditor;
+			const editor = getActiveSupportedEditor('showPreview');
 			if (!editor) {
-				// Preview panel (or something else) has focus — find a preview
-				// whose source file is still visible and activate it.
-				for (const visible of vscode.window.visibleTextEditors) {
-					if (MermaidPreviewPanel.revealForDocument(visible.document)) {
-						return;
-					}
-				}
-				if (MermaidPreviewPanel.revealAny()) {
-					return;
-				}
-				logger.logWarning('showPreview invoked without an active editor');
-				vscode.window.showInformationMessage(
-					'Open a Markdown or Mermaid file containing diagrams to preview them.',
-				);
-				return;
-			}
-
-			if (
-				editor.document.languageId !== 'markdown' &&
-				editor.document.languageId !== 'mermaid'
-			) {
-				logger.logWarning('showPreview invoked for unsupported document', {
-					languageId: editor.document.languageId,
-					uri: editor.document.uri.toString(),
-				});
-				vscode.window.showInformationMessage(
-					'Mermaid Viewer only works with Markdown and Mermaid files.',
-				);
 				return;
 			}
 
@@ -976,44 +981,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const showPreviewToSideCommand = vscode.commands.registerCommand(
 		'mermaidViewer.showPreviewToSide',
 		async () => {
-			const editor = vscode.window.activeTextEditor;
+			const editor = getActiveSupportedEditor('showPreviewToSide');
 			if (!editor) {
-				// Preview panel (or something else) has focus — find a preview
-				// whose source file is still visible and activate it.
-				for (const visible of vscode.window.visibleTextEditors) {
-					if (
-						MermaidPreviewPanel.revealForDocument(
-							visible.document,
-							vscode.ViewColumn.Beside,
-						)
-					) {
-						return;
-					}
-				}
-				if (MermaidPreviewPanel.revealAny(vscode.ViewColumn.Beside)) {
-					return;
-				}
-				logger.logWarning('showPreviewToSide invoked without an active editor');
-				vscode.window.showInformationMessage(
-					'Open a Markdown or Mermaid file containing diagrams to preview them.',
-				);
-				return;
-			}
-
-			if (
-				editor.document.languageId !== 'markdown' &&
-				editor.document.languageId !== 'mermaid'
-			) {
-				logger.logWarning(
-					'showPreviewToSide invoked for unsupported document',
-					{
-						languageId: editor.document.languageId,
-						uri: editor.document.uri.toString(),
-					},
-				);
-				vscode.window.showInformationMessage(
-					'Mermaid Viewer only works with Markdown and Mermaid files.',
-				);
 				return;
 			}
 
@@ -1043,31 +1012,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const showPreviewInNewWindowCommand = vscode.commands.registerCommand(
 		'mermaidViewer.showPreviewInNewWindow',
 		async () => {
-			const editor = vscode.window.activeTextEditor;
+			const editor = getActiveSupportedEditor('showPreviewInNewWindow');
 			if (!editor) {
-				logger.logWarning(
-					'showPreviewInNewWindow invoked without an active editor',
-				);
-				vscode.window.showInformationMessage(
-					'Open a Markdown or Mermaid file containing diagrams to preview them.',
-				);
-				return;
-			}
-
-			if (
-				editor.document.languageId !== 'markdown' &&
-				editor.document.languageId !== 'mermaid'
-			) {
-				logger.logWarning(
-					'showPreviewInNewWindow invoked for unsupported document',
-					{
-						languageId: editor.document.languageId,
-						uri: editor.document.uri.toString(),
-					},
-				);
-				vscode.window.showInformationMessage(
-					'Mermaid Viewer only works with Markdown and Mermaid files.',
-				);
 				return;
 			}
 
