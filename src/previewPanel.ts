@@ -1379,6 +1379,7 @@ export class MermaidPreviewPanel {
             const roundedPanX = Math.round(panX);
             const roundedPanY = Math.round(panY);
             stageEl.style.transform = 'translate(' + roundedPanX + 'px, ' + roundedPanY + 'px)';
+            scheduleAnnotationRedraw();
         }
 
         function applyZoomScale() {
@@ -1387,6 +1388,7 @@ export class MermaidPreviewPanel {
                 el.style.transform = 'scale(' + currentZoom + ')';
             });
             document.getElementById('zoom-level').textContent = Math.round(currentZoom * 100) + '%';
+            scheduleAnnotationRedraw();
         }
 
         window.zoomIn = function() {
@@ -2418,10 +2420,20 @@ export class MermaidPreviewPanel {
 
         function getAnnotationPoint(event) {
             const rect = annotationCanvas.getBoundingClientRect();
+            // Convert screen position to diagram-space so strokes follow zoom/pan
+            const cssX = event.clientX - rect.left;
+            const cssY = event.clientY - rect.top;
+            return {
+                x: (cssX - panX) / currentZoom,
+                y: (cssY - panY) / currentZoom
+            };
+        }
+
+        function diagramToCanvas(pt) {
             const dpr = window.devicePixelRatio || 1;
             return {
-                x: (event.clientX - rect.left) * dpr,
-                y: (event.clientY - rect.top) * dpr
+                x: (pt.x * currentZoom + panX) * dpr,
+                y: (pt.y * currentZoom + panY) * dpr
             };
         }
 
@@ -2671,9 +2683,9 @@ export class MermaidPreviewPanel {
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
-            // Persistent pen strokes
+            // Persistent pen strokes — transform diagram-space → canvas-space
             for (const stroke of penStrokes) {
-                drawSmooth(ctx, stroke.points, stroke.color, stroke.lineWidth, 1.0);
+                drawSmooth(ctx, stroke.points.map(diagramToCanvas), stroke.color, stroke.lineWidth, 1.0);
             }
 
             // Laser strokes with fade-out
@@ -2682,16 +2694,17 @@ export class MermaidPreviewPanel {
                 const elapsed = now - stroke.startTime;
                 const alpha = Math.max(0, 1 - elapsed / LASER_DURATION_MS);
                 if (alpha > 0) {
-                    drawLaserGlow(ctx, stroke.points, alpha);
+                    drawLaserGlow(ctx, stroke.points.map(diagramToCanvas), alpha);
                 }
             }
 
             // Active stroke being drawn right now
             if (activeStroke && activeStroke.points.length > 0) {
+                const pts = activeStroke.points.map(diagramToCanvas);
                 if (activeStroke.mode === 'laser') {
-                    drawLaserGlow(ctx, activeStroke.points, 1.0);
+                    drawLaserGlow(ctx, pts, 1.0);
                 } else {
-                    drawSmooth(ctx, activeStroke.points, activeStroke.color, activeStroke.lineWidth, 1.0);
+                    drawSmooth(ctx, pts, activeStroke.color, activeStroke.lineWidth, 1.0);
                 }
             }
         }
