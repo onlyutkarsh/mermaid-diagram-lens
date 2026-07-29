@@ -1422,6 +1422,9 @@ export class MermaidPreviewPanel {
                 return;
             }
 
+            // Ensure the viewport has DOM focus so keyboard shortcuts work
+            if (viewportEl) viewportEl.focus({ preventScroll: true });
+
             isPanning = true;
             lastPanX = event.clientX;
             lastPanY = event.clientY;
@@ -2145,6 +2148,10 @@ export class MermaidPreviewPanel {
                 bindToolbarControls();
                 bindKeyboardShortcuts();
                 initAnnotationCanvas();
+                // Give the viewport DOM focus immediately so keyboard shortcuts
+                // work without requiring the user to click first
+                const vp = document.getElementById('diagram-viewport');
+                if (vp) vp.focus({ preventScroll: true });
                 // Save state immediately on load to ensure it persists for restoration
                 saveInteractionState();
                 vscode.postMessage({ command: 'lifecycleEvent', status: 'webviewLoaded', documentId });
@@ -2500,6 +2507,8 @@ export class MermaidPreviewPanel {
             if (annotationMode === 'none') return;
             event.preventDefault();
             event.stopPropagation();
+            // Ensure DOM focus so keyboard shortcuts keep working while annotating
+            if (viewportEl) viewportEl.focus({ preventScroll: true });
             isDrawingAnnotation = true;
             const pt = getAnnotationPoint(event);
             activeStroke = {
@@ -2811,6 +2820,7 @@ export class MermaidPreviewPanel {
             cursor: -webkit-grab;
             cursor: grab;
             position: relative;
+            outline: none;
         }
 
         #diagram-stage {
@@ -3235,7 +3245,7 @@ export class MermaidPreviewPanel {
         </div>
     </div>
     <div id="viewport-wrapper">
-        <div id="diagram-viewport">
+        <div id="diagram-viewport" tabindex="-1">
             <div id="diagram-stage">
                 <div id="diagrams-container"></div>
             </div>
