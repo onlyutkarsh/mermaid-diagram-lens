@@ -2434,6 +2434,11 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
+        let activeDrawStageRect = null;
+        let penStrokesRevision = 0;
+        let staticAnnotationCanvas = null;
+        let staticAnnotationCtx = null;
+        let staticRenderKey = '';
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2459,13 +2464,14 @@ export class MermaidPreviewPanel {
             const dpr = window.devicePixelRatio || 1;
             annotationCanvas.width = wrapper.clientWidth * dpr;
             annotationCanvas.height = wrapper.clientHeight * dpr;
+            staticRenderKey = '';
             scheduleAnnotationRedraw();
         }
 
         function getAnnotationPoint(event) {
             // Use the stage's actual screen rect so scroll, padding and CSS
             // transforms are all accounted for — works correctly at any zoom level
-            const stageRect = stageEl.getBoundingClientRect();
+            const stageRect = activeDrawStageRect || stageEl.getBoundingClientRect();
             return {
                 x: (event.clientX - stageRect.left) / currentZoom,
                 y: (event.clientY - stageRect.top) / currentZoom
@@ -2564,8 +2570,11 @@ export class MermaidPreviewPanel {
 
         function eraseAllAnnotations() {
             penStrokes = [];
+            penStrokesRevision++;
+            staticRenderKey = '';
             laserStrokes = [];
             activeStroke = null;
+            activeDrawStageRect = null;
             if (annotationCtx) {
                 annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
             }
@@ -2611,6 +2620,7 @@ export class MermaidPreviewPanel {
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
             if (viewportEl) viewportEl.focus({ preventScroll: true });
             isDrawingAnnotation = true;
+            activeDrawStageRect = stageEl ? stageEl.getBoundingClientRect() : null;
             const pt = getAnnotationPoint(event);
             if (annotationMode === 'shape') {
                 activeStroke = {
@@ -2641,7 +2651,18 @@ export class MermaidPreviewPanel {
             if (activeStroke.mode === 'shape') {
                 activeStroke.end = pt;
             } else {
-                activeStroke.points.push(pt);
+                const last = activeStroke.points[activeStroke.points.length - 1];
+                if (!last) {
+                    activeStroke.points.push(pt);
+                } else {
+                    const dx = pt.x - last.x;
+                    const dy = pt.y - last.y;
+                    // Keep input point density bounded to avoid very long redraw paths.
+                    const minDist = 0.8 / Math.max(currentZoom, 0.1);
+                    if ((dx * dx + dy * dy) >= (minDist * minDist)) {
+                        activeStroke.points.push(pt);
+                    }
+                }
             }
             scheduleAnnotationRedraw();
         }
@@ -2651,9 +2672,13 @@ export class MermaidPreviewPanel {
             isDrawingAnnotation = false;
             if (activeStroke.mode === 'shape') {
                 penStrokes.push(activeStroke);
+                penStrokesRevision++;
+                staticRenderKey = '';
             } else if (activeStroke.mode === 'pen') {
                 if (activeStroke.points.length > 0) {
                     penStrokes.push(activeStroke);
+                    penStrokesRevision++;
+                    staticRenderKey = '';
                 }
             } else if (activeStroke.mode === 'laser') {
                 activeStroke.startTime = Date.now();
@@ -2663,12 +2688,15 @@ export class MermaidPreviewPanel {
                 }
             }
             activeStroke = null;
+            activeDrawStageRect = null;
             scheduleAnnotationRedraw();
         }
 
         function onAnnotationLeave(event) {
             if (isDrawingAnnotation) {
                 onAnnotationUp(event);
+            } else {
+                activeDrawStageRect = null;
             }
         }
 
@@ -2806,6 +2834,25 @@ export class MermaidPreviewPanel {
             ctx.restore();
         }
 
+        function ensureStaticAnnotationCanvas() {
+            if (!annotationCanvas) return false;
+            if (!staticAnnotationCanvas) {
+                staticAnnotationCanvas = document.createElement('canvas');
+                staticAnnotationCtx = staticAnnotationCanvas.getContext('2d');
+                staticRenderKey = '';
+            }
+            if (!staticAnnotationCtx) return false;
+            if (
+                staticAnnotationCanvas.width !== annotationCanvas.width ||
+                staticAnnotationCanvas.height !== annotationCanvas.height
+            ) {
+                staticAnnotationCanvas.width = annotationCanvas.width;
+                staticAnnotationCanvas.height = annotationCanvas.height;
+                staticRenderKey = '';
+            }
+            return true;
+        }
+
         function redrawAnnotations() {
             if (!annotationCtx || !annotationCanvas || !stageEl) return;
             const ctx = annotationCtx;
@@ -2822,15 +2869,41 @@ export class MermaidPreviewPanel {
             const offsetY = (stageRect.top - canvasRect.top) * dpr;
 
             const toCanvas = pt => diagramToCanvas(pt, offsetX, offsetY);
+            const renderKey =
+                annotationCanvas.width + '|' +
+                annotationCanvas.height + '|' +
+                Math.round(currentZoom * 10000) + '|' +
+                Math.round(offsetX) + '|' +
+                Math.round(offsetY) + '|' +
+                penStrokesRevision;
 
-            // Persistent pen + shape strokes
-            for (const stroke of penStrokes) {
-                if (stroke.mode === 'shape') {
-                    drawShapeOnCanvas(ctx, stroke.shapeType,
-                        toCanvas(stroke.start), toCanvas(stroke.end),
-                        stroke.color, stroke.lineWidth);
-                } else {
-                    drawSmooth(ctx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
+            // Persistent strokes are rendered onto an offscreen layer and reused
+            // while the user draws, so each move frame stays lightweight.
+            if (ensureStaticAnnotationCanvas()) {
+                if (staticRenderKey !== renderKey) {
+                    staticAnnotationCtx.clearRect(0, 0, staticAnnotationCanvas.width, staticAnnotationCanvas.height);
+                    for (const stroke of penStrokes) {
+                        if (stroke.mode === 'shape') {
+                            drawShapeOnCanvas(staticAnnotationCtx, stroke.shapeType,
+                                toCanvas(stroke.start), toCanvas(stroke.end),
+                                stroke.color, stroke.lineWidth);
+                        } else {
+                            drawSmooth(staticAnnotationCtx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
+                        }
+                    }
+                    staticRenderKey = renderKey;
+                }
+                ctx.drawImage(staticAnnotationCanvas, 0, 0);
+            } else {
+                // Fallback path if offscreen layer cannot be created.
+                for (const stroke of penStrokes) {
+                    if (stroke.mode === 'shape') {
+                        drawShapeOnCanvas(ctx, stroke.shapeType,
+                            toCanvas(stroke.start), toCanvas(stroke.end),
+                            stroke.color, stroke.lineWidth);
+                    } else {
+                        drawSmooth(ctx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
+                    }
                 }
             }
 
