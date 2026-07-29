@@ -2362,7 +2362,7 @@ export class MermaidPreviewPanel {
         let penColorIdx = 0;
         const PEN_COLORS = ['#ef4444', '#3b82f6', '#22c55e']; // red, blue, green
         const LASER_COLOR = '#ff3333';
-        const LASER_DURATION_MS = 2500;
+        const LASER_DURATION_MS = 1000;
 
         let annotationCanvas = null;
         let annotationCtx = null;
@@ -2410,6 +2410,7 @@ export class MermaidPreviewPanel {
             annotationMode = mode;
             if (mode === 'none') {
                 annotationCanvas.style.pointerEvents = 'none';
+                annotationCanvas.style.cursor = '';
                 document.body.classList.remove('is-annotating');
             } else {
                 annotationCanvas.style.pointerEvents = 'all';
@@ -2418,12 +2419,28 @@ export class MermaidPreviewPanel {
             updateAnnotationUI();
         }
 
+        function makeDotCursor(color) {
+            const r = 6; // radius of the dot
+            const size = r * 2 + 2;
+            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '">' +
+                '<circle cx="' + (r + 1) + '" cy="' + (r + 1) + '" r="' + r + '" fill="' + color + '" stroke="rgba(0,0,0,0.6)" stroke-width="1.5"/>' +
+                '</svg>';
+            return 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") ' + (r + 1) + ' ' + (r + 1) + ', crosshair';
+        }
+
+        function applyDotCursor() {
+            if (annotationMode === 'none') return;
+            const color = annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx];
+            annotationCanvas.style.cursor = makeDotCursor(color);
+        }
+
         function cyclePenColor() {
             if (annotationMode === 'pen') {
                 penColorIdx = (penColorIdx + 1) % PEN_COLORS.length;
             } else {
                 setAnnotationMode('pen');
             }
+            applyDotCursor();
             updateAnnotationUI();
         }
 
@@ -2457,6 +2474,7 @@ export class MermaidPreviewPanel {
             if (laserBtn) {
                 laserBtn.classList.toggle('annotation-active', annotationMode === 'laser');
             }
+            applyDotCursor();
         }
 
         function onAnnotationDown(event) {
@@ -3039,7 +3057,7 @@ export class MermaidPreviewPanel {
             height: 100%;
             pointer-events: none;
             z-index: 5;
-            cursor: crosshair;
+            cursor: none;
         }
 
         .annotation-tool-btn {
@@ -3082,7 +3100,7 @@ export class MermaidPreviewPanel {
             transition: background-color 0.15s;
         }
 
-        /* Crosshair cursor overrides when annotating */
+        /* Suppress system cursor when annotating — canvas sets its own dot cursor */
         body.is-annotating #diagram-viewport,
         body.is-annotating #diagram-stage,
         body.is-annotating #diagrams-container,
@@ -3090,7 +3108,7 @@ export class MermaidPreviewPanel {
         body.is-annotating .diagram-shell *,
         body.is-annotating .diagram-content,
         body.is-annotating .diagram-content * {
-            cursor: crosshair !important;
+            cursor: none !important;
         }
 
         body.is-annotating.is-panning #diagram-viewport,
@@ -3100,7 +3118,7 @@ export class MermaidPreviewPanel {
         body.is-annotating.is-panning .diagram-shell *,
         body.is-annotating.is-panning .diagram-content,
         body.is-annotating.is-panning .diagram-content * {
-            cursor: crosshair !important;
+            cursor: none !important;
         }
     </style>
 </head>
