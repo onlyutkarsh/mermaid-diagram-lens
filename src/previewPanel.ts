@@ -2447,6 +2447,7 @@ export class MermaidPreviewPanel {
         let activeStrokePerf = null;
         let lastPerfProgressAt = 0;
         let usingRawPointerInput = false;
+        let windowMouseTracking = false;
 
         function postAnnotationPerf(event, data = {}) {
             vscode.postMessage({
@@ -2493,14 +2494,18 @@ export class MermaidPreviewPanel {
             scheduleAnnotationRedraw();
         }
 
-        function getAnnotationPoint(event) {
+        function getAnnotationPointFromClient(clientX, clientY) {
             // Use the stage's actual screen rect so scroll, padding and CSS
             // transforms are all accounted for — works correctly at any zoom level
             const stageRect = stageEl.getBoundingClientRect();
             return {
-                x: (event.clientX - stageRect.left) / currentZoom,
-                y: (event.clientY - stageRect.top) / currentZoom
+                x: (clientX - stageRect.left) / currentZoom,
+                y: (clientY - stageRect.top) / currentZoom
             };
+        }
+
+        function getAnnotationPoint(event) {
+            return getAnnotationPointFromClient(event.clientX, event.clientY);
         }
 
         function diagramToCanvas(pt, offsetX, offsetY) {
@@ -2685,6 +2690,12 @@ export class MermaidPreviewPanel {
             }
             if (event.pointerType !== 'mouse') {
                 annotationCanvas.setPointerCapture(event.pointerId);
+            } else {
+                if (!windowMouseTracking) {
+                    window.addEventListener('mousemove', onWindowMouseMove, { passive: false });
+                    window.addEventListener('mouseup', onWindowMouseUp, { passive: false });
+                    windowMouseTracking = true;
+                }
             }
             requestAnnotationRedraw(true);
             postAnnotationPerf('strokeStart', {
@@ -2696,8 +2707,48 @@ export class MermaidPreviewPanel {
             });
         }
 
+        function processAnnotationMoveSample(clientX, clientY, sampleTimeStamp) {
+            const pointStart = performance.now();
+            const pt = getAnnotationPointFromClient(clientX, clientY);
+            const pointElapsed = performance.now() - pointStart;
+            if (activeStrokePerf) {
+                activeStrokePerf.moves += 1;
+                activeStrokePerf.pointCalcTotalMs += pointElapsed;
+                const eventLagMs = Math.max(0, performance.now() - sampleTimeStamp);
+                activeStrokePerf.eventLagTotalMs += eventLagMs;
+                if (eventLagMs > activeStrokePerf.eventLagMaxMs) {
+                    activeStrokePerf.eventLagMaxMs = eventLagMs;
+                }
+            }
+            if (activeStroke.mode === 'shape') {
+                activeStroke.end = pt;
+            } else {
+                activeStroke.points.push(pt);
+            }
+        }
+
+        function onWindowMouseMove(event) {
+            if (!isDrawingAnnotation || !activeStroke || activeStrokePerf?.pointerType !== 'mouse') return;
+            event.preventDefault();
+            processAnnotationMoveSample(event.clientX, event.clientY, event.timeStamp);
+            requestAnnotationRedraw(true);
+        }
+
+        function onWindowMouseUp(event) {
+            if (!windowMouseTracking) return;
+            window.removeEventListener('mousemove', onWindowMouseMove);
+            window.removeEventListener('mouseup', onWindowMouseUp);
+            windowMouseTracking = false;
+            if (isDrawingAnnotation && activeStrokePerf?.pointerType === 'mouse') {
+                onAnnotationUp(event);
+            }
+        }
+
         function onAnnotationMove(event) {
             if (!isDrawingAnnotation || !activeStroke) return;
+            if (activeStrokePerf?.pointerType === 'mouse') {
+                return;
+            }
             if (event.type === 'pointerrawupdate') {
                 usingRawPointerInput = true;
             } else if (usingRawPointerInput) {
@@ -2714,23 +2765,7 @@ export class MermaidPreviewPanel {
             const samples = events.length > 0 ? events : [event];
 
             for (const sample of samples) {
-                const pointStart = performance.now();
-                const pt = getAnnotationPoint(sample);
-                const pointElapsed = performance.now() - pointStart;
-                if (activeStrokePerf) {
-                    activeStrokePerf.moves += 1;
-                    activeStrokePerf.pointCalcTotalMs += pointElapsed;
-                    const eventLagMs = Math.max(0, performance.now() - sample.timeStamp);
-                    activeStrokePerf.eventLagTotalMs += eventLagMs;
-                    if (eventLagMs > activeStrokePerf.eventLagMaxMs) {
-                        activeStrokePerf.eventLagMaxMs = eventLagMs;
-                    }
-                }
-                if (activeStroke.mode === 'shape') {
-                    activeStroke.end = pt;
-                } else {
-                    activeStroke.points.push(pt);
-                }
+                processAnnotationMoveSample(sample.clientX, sample.clientY, sample.timeStamp);
             }
             requestAnnotationRedraw(true);
             const now = performance.now();
@@ -2819,6 +2854,11 @@ export class MermaidPreviewPanel {
             activeStroke = null;
             activeStrokePerf = null;
             usingRawPointerInput = false;
+            if (windowMouseTracking) {
+                window.removeEventListener('mousemove', onWindowMouseMove);
+                window.removeEventListener('mouseup', onWindowMouseUp);
+                windowMouseTracking = false;
+            }
             requestAnnotationRedraw(true);
         }
 
@@ -2834,6 +2874,7 @@ export class MermaidPreviewPanel {
                     cancelAnimationFrame(pendingAnnotationRedraw);
                     pendingAnnotationRedraw = null;
                 }
+                pendingAnnotationScheduledAt = 0;
                 redrawAnnotations();
                 return;
             }
