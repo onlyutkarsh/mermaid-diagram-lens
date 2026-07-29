@@ -2446,6 +2446,7 @@ export class MermaidPreviewPanel {
         let annotationStrokeSeq = 0;
         let activeStrokePerf = null;
         let lastPerfProgressAt = 0;
+        let usingRawPointerInput = false;
 
         function postAnnotationPerf(event, data = {}) {
             vscode.postMessage({
@@ -2470,6 +2471,7 @@ export class MermaidPreviewPanel {
 
             annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
             annotationCanvas.addEventListener('pointermove', onAnnotationMove);
+            annotationCanvas.addEventListener('pointerrawupdate', onAnnotationMove);
             annotationCanvas.addEventListener('pointerup', onAnnotationUp);
             annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
             annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
@@ -2640,6 +2642,7 @@ export class MermaidPreviewPanel {
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
             if (viewportEl) viewportEl.focus({ preventScroll: true });
             isDrawingAnnotation = true;
+            usingRawPointerInput = false;
             annotationStrokeSeq += 1;
             activeStrokePerf = {
                 id: annotationStrokeSeq,
@@ -2690,23 +2693,39 @@ export class MermaidPreviewPanel {
 
         function onAnnotationMove(event) {
             if (!isDrawingAnnotation || !activeStroke) return;
-            event.preventDefault();
-            const pointStart = performance.now();
-            const pt = getAnnotationPoint(event);
-            const pointElapsed = performance.now() - pointStart;
-            if (activeStrokePerf) {
-                activeStrokePerf.moves += 1;
-                activeStrokePerf.pointCalcTotalMs += pointElapsed;
-                const eventLagMs = Math.max(0, performance.now() - event.timeStamp);
-                activeStrokePerf.eventLagTotalMs += eventLagMs;
-                if (eventLagMs > activeStrokePerf.eventLagMaxMs) {
-                    activeStrokePerf.eventLagMaxMs = eventLagMs;
-                }
+            if (event.type === 'pointerrawupdate') {
+                usingRawPointerInput = true;
+            } else if (usingRawPointerInput) {
+                // Avoid duplicate processing when raw updates are available.
+                return;
             }
-            if (activeStroke.mode === 'shape') {
-                activeStroke.end = pt;
-            } else {
-                activeStroke.points.push(pt);
+            if (event.cancelable) {
+                event.preventDefault();
+            }
+
+            const events = (typeof event.getCoalescedEvents === 'function')
+                ? event.getCoalescedEvents()
+                : [event];
+            const samples = events.length > 0 ? events : [event];
+
+            for (const sample of samples) {
+                const pointStart = performance.now();
+                const pt = getAnnotationPoint(sample);
+                const pointElapsed = performance.now() - pointStart;
+                if (activeStrokePerf) {
+                    activeStrokePerf.moves += 1;
+                    activeStrokePerf.pointCalcTotalMs += pointElapsed;
+                    const eventLagMs = Math.max(0, performance.now() - sample.timeStamp);
+                    activeStrokePerf.eventLagTotalMs += eventLagMs;
+                    if (eventLagMs > activeStrokePerf.eventLagMaxMs) {
+                        activeStrokePerf.eventLagMaxMs = eventLagMs;
+                    }
+                }
+                if (activeStroke.mode === 'shape') {
+                    activeStroke.end = pt;
+                } else {
+                    activeStroke.points.push(pt);
+                }
             }
             scheduleAnnotationRedraw();
             const now = performance.now();
@@ -2787,6 +2806,7 @@ export class MermaidPreviewPanel {
             }
             activeStroke = null;
             activeStrokePerf = null;
+            usingRawPointerInput = false;
             scheduleAnnotationRedraw();
         }
 
