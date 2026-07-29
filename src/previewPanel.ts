@@ -1113,8 +1113,6 @@ export class MermaidPreviewPanel {
         let pendingZoomUpdate = null;
         let lastParseError = null;
         let annotationMode = 'none'; // hoisted here; full annotation state is declared below
-        let keyboardShortcutsBound = false;
-        let toolbarControlsBound = false;
         const THEME_LABELS = {
             default: 'Default',
             dark: 'Dark',
@@ -1383,9 +1381,7 @@ export class MermaidPreviewPanel {
             const roundedPanX = Math.round(panX);
             const roundedPanY = Math.round(panY);
             stageEl.style.transform = 'translate(' + roundedPanX + 'px, ' + roundedPanY + 'px)';
-            if (penStrokes.length > 0 || laserStrokes.length > 0 || activeStroke) {
-                scheduleAnnotationRedraw();
-            }
+            scheduleAnnotationRedraw();
         }
 
         function applyZoomScale() {
@@ -1394,9 +1390,7 @@ export class MermaidPreviewPanel {
                 el.style.transform = 'scale(' + currentZoom + ')';
             });
             document.getElementById('zoom-level').textContent = Math.round(currentZoom * 100) + '%';
-            if (penStrokes.length > 0 || laserStrokes.length > 0 || activeStroke) {
-                scheduleAnnotationRedraw();
-            }
+            scheduleAnnotationRedraw();
         }
 
         window.zoomIn = function() {
@@ -2197,10 +2191,6 @@ export class MermaidPreviewPanel {
         }, RENDER_TIMEOUT_MS);
 
         function bindKeyboardShortcuts() {
-            if (keyboardShortcutsBound) {
-                return;
-            }
-            keyboardShortcutsBound = true;
             document.addEventListener('keydown', (event) => {
                 // Ignore keyboard shortcuts when typing in input fields
                 if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
@@ -2343,10 +2333,6 @@ export class MermaidPreviewPanel {
         }
 
         function bindToolbarControls() {
-            if (toolbarControlsBound) {
-                return;
-            }
-            toolbarControlsBound = true;
             const actionMap = new Map([
                 ['zoom-in', zoomIn],
                 ['zoom-out', zoomOut],
@@ -2448,9 +2434,6 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
-        let activeDrawStageRect = null;
-        let annotationPointerHandlersBound = false;
-        let annotationResizeObserver = null;
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2459,25 +2442,13 @@ export class MermaidPreviewPanel {
 
             const wrapper = document.getElementById('viewport-wrapper');
             resizeAnnotationCanvas(wrapper);
-            if (!annotationResizeObserver) {
-                annotationResizeObserver = new ResizeObserver(() => {
-                    const liveWrapper = document.getElementById('viewport-wrapper');
-                    if (liveWrapper) {
-                        resizeAnnotationCanvas(liveWrapper);
-                    }
-                });
-            }
-            annotationResizeObserver.disconnect();
-            annotationResizeObserver.observe(wrapper);
+            new ResizeObserver(() => resizeAnnotationCanvas(wrapper)).observe(wrapper);
 
-            if (!annotationPointerHandlersBound) {
-                annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
-                annotationCanvas.addEventListener('pointermove', onAnnotationMove);
-                annotationCanvas.addEventListener('pointerup', onAnnotationUp);
-                annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
-                annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
-                annotationPointerHandlersBound = true;
-            }
+            annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
+            annotationCanvas.addEventListener('pointermove', onAnnotationMove);
+            annotationCanvas.addEventListener('pointerup', onAnnotationUp);
+            annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
+            annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
 
             // Populate shape icon on first render
             updateShapeIcon();
@@ -2494,7 +2465,7 @@ export class MermaidPreviewPanel {
         function getAnnotationPoint(event) {
             // Use the stage's actual screen rect so scroll, padding and CSS
             // transforms are all accounted for — works correctly at any zoom level
-            const stageRect = activeDrawStageRect || stageEl.getBoundingClientRect();
+            const stageRect = stageEl.getBoundingClientRect();
             return {
                 x: (event.clientX - stageRect.left) / currentZoom,
                 y: (event.clientY - stageRect.top) / currentZoom
@@ -2640,7 +2611,6 @@ export class MermaidPreviewPanel {
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
             if (viewportEl) viewportEl.focus({ preventScroll: true });
             isDrawingAnnotation = true;
-            activeDrawStageRect = stageEl ? stageEl.getBoundingClientRect() : null;
             const pt = getAnnotationPoint(event);
             if (annotationMode === 'shape') {
                 activeStroke = {
@@ -2671,18 +2641,7 @@ export class MermaidPreviewPanel {
             if (activeStroke.mode === 'shape') {
                 activeStroke.end = pt;
             } else {
-                const last = activeStroke.points[activeStroke.points.length - 1];
-                if (!last) {
-                    activeStroke.points.push(pt);
-                } else {
-                    const dx = pt.x - last.x;
-                    const dy = pt.y - last.y;
-                    // Keep point density bounded in screen-space to avoid heavy redraws
-                    const minDist = 0.8 / Math.max(currentZoom, 0.1);
-                    if ((dx * dx + dy * dy) >= (minDist * minDist)) {
-                        activeStroke.points.push(pt);
-                    }
-                }
+                activeStroke.points.push(pt);
             }
             scheduleAnnotationRedraw();
         }
@@ -2704,15 +2663,12 @@ export class MermaidPreviewPanel {
                 }
             }
             activeStroke = null;
-            activeDrawStageRect = null;
             scheduleAnnotationRedraw();
         }
 
         function onAnnotationLeave(event) {
             if (isDrawingAnnotation) {
                 onAnnotationUp(event);
-            } else {
-                activeDrawStageRect = null;
             }
         }
 
@@ -2856,10 +2812,6 @@ export class MermaidPreviewPanel {
             ctx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
-
-            if (penStrokes.length === 0 && laserStrokes.length === 0 && !activeStroke) {
-                return;
-            }
 
             // Compute stage→canvas offset once per frame using live rects so that
             // scroll, CSS padding, and all transforms are automatically included
