@@ -361,6 +361,12 @@ export class MermaidPreviewPanel {
 							stack: message.stack ?? 'no-stack',
 						});
 						break;
+					case 'annotationPerf':
+						this._logger.logInfo('AnnotationPerf', {
+							document: this._currentDocument?.uri.toString() ?? 'unknown',
+							...message,
+						});
+						break;
 					case 'lifecycleEvent':
 						this._logger.logDebug(
 							'WebviewLifecycle',
@@ -2434,6 +2440,18 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
+        const PERF_LOG_INTERVAL_MS = 1000;
+        let annotationStrokeSeq = 0;
+        let activeStrokePerf = null;
+        let lastPerfProgressAt = 0;
+
+        function postAnnotationPerf(event, data = {}) {
+            vscode.postMessage({
+                command: 'annotationPerf',
+                event,
+                ...data
+            });
+        }
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2452,6 +2470,11 @@ export class MermaidPreviewPanel {
 
             // Populate shape icon on first render
             updateShapeIcon();
+            postAnnotationPerf('canvasInit', {
+                dpr: window.devicePixelRatio || 1,
+                width: annotationCanvas.width,
+                height: annotationCanvas.height
+            });
         }
 
         function resizeAnnotationCanvas(wrapper) {
@@ -2611,6 +2634,20 @@ export class MermaidPreviewPanel {
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
             if (viewportEl) viewportEl.focus({ preventScroll: true });
             isDrawingAnnotation = true;
+            annotationStrokeSeq += 1;
+            activeStrokePerf = {
+                id: annotationStrokeSeq,
+                mode: annotationMode,
+                shapeType: annotationMode === 'shape' ? currentShape : null,
+                startTs: performance.now(),
+                moves: 0,
+                redraws: 0,
+                redrawTotalMs: 0,
+                redrawMaxMs: 0,
+                pointCalcTotalMs: 0,
+                scheduleSkips: 0
+            };
+            lastPerfProgressAt = 0;
             const pt = getAnnotationPoint(event);
             if (annotationMode === 'shape') {
                 activeStroke = {
@@ -2632,22 +2669,53 @@ export class MermaidPreviewPanel {
             }
             annotationCanvas.setPointerCapture(event.pointerId);
             scheduleAnnotationRedraw();
+            postAnnotationPerf('strokeStart', {
+                id: activeStrokePerf.id,
+                mode: activeStrokePerf.mode,
+                shapeType: activeStrokePerf.shapeType,
+                zoom: currentZoom
+            });
         }
 
         function onAnnotationMove(event) {
             if (!isDrawingAnnotation || !activeStroke) return;
             event.preventDefault();
+            const pointStart = performance.now();
             const pt = getAnnotationPoint(event);
+            const pointElapsed = performance.now() - pointStart;
+            if (activeStrokePerf) {
+                activeStrokePerf.moves += 1;
+                activeStrokePerf.pointCalcTotalMs += pointElapsed;
+            }
             if (activeStroke.mode === 'shape') {
                 activeStroke.end = pt;
             } else {
                 activeStroke.points.push(pt);
             }
             scheduleAnnotationRedraw();
+            const now = performance.now();
+            if (activeStrokePerf && (now - lastPerfProgressAt) >= PERF_LOG_INTERVAL_MS) {
+                lastPerfProgressAt = now;
+                postAnnotationPerf('strokeProgress', {
+                    id: activeStrokePerf.id,
+                    mode: activeStrokePerf.mode,
+                    moves: activeStrokePerf.moves,
+                    redraws: activeStrokePerf.redraws,
+                    avgRedrawMs: activeStrokePerf.redraws > 0
+                        ? Number((activeStrokePerf.redrawTotalMs / activeStrokePerf.redraws).toFixed(2))
+                        : 0,
+                    maxRedrawMs: Number(activeStrokePerf.redrawMaxMs.toFixed(2)),
+                    avgPointCalcMs: activeStrokePerf.moves > 0
+                        ? Number((activeStrokePerf.pointCalcTotalMs / activeStrokePerf.moves).toFixed(3))
+                        : 0,
+                    scheduleSkips: activeStrokePerf.scheduleSkips
+                });
+            }
         }
 
         function onAnnotationUp(event) {
             if (!isDrawingAnnotation || !activeStroke) return;
+            const perfInfo = activeStrokePerf;
             isDrawingAnnotation = false;
             if (activeStroke.mode === 'shape') {
                 penStrokes.push(activeStroke);
@@ -2662,7 +2730,31 @@ export class MermaidPreviewPanel {
                     startLaserFade();
                 }
             }
+            if (perfInfo) {
+                const durationMs = performance.now() - perfInfo.startTs;
+                const pointCount = activeStroke.mode === 'shape'
+                    ? 2
+                    : (activeStroke.points ? activeStroke.points.length : 0);
+                postAnnotationPerf('strokeEnd', {
+                    id: perfInfo.id,
+                    mode: perfInfo.mode,
+                    shapeType: perfInfo.shapeType,
+                    durationMs: Number(durationMs.toFixed(2)),
+                    moves: perfInfo.moves,
+                    pointCount,
+                    redraws: perfInfo.redraws,
+                    avgRedrawMs: perfInfo.redraws > 0
+                        ? Number((perfInfo.redrawTotalMs / perfInfo.redraws).toFixed(2))
+                        : 0,
+                    maxRedrawMs: Number(perfInfo.redrawMaxMs.toFixed(2)),
+                    avgPointCalcMs: perfInfo.moves > 0
+                        ? Number((perfInfo.pointCalcTotalMs / perfInfo.moves).toFixed(3))
+                        : 0,
+                    scheduleSkips: perfInfo.scheduleSkips
+                });
+            }
             activeStroke = null;
+            activeStrokePerf = null;
             scheduleAnnotationRedraw();
         }
 
@@ -2673,7 +2765,12 @@ export class MermaidPreviewPanel {
         }
 
         function scheduleAnnotationRedraw() {
-            if (pendingAnnotationRedraw) return;
+            if (pendingAnnotationRedraw) {
+                if (activeStrokePerf) {
+                    activeStrokePerf.scheduleSkips += 1;
+                }
+                return;
+            }
             pendingAnnotationRedraw = requestAnimationFrame(() => {
                 pendingAnnotationRedraw = null;
                 redrawAnnotations();
@@ -2808,6 +2905,7 @@ export class MermaidPreviewPanel {
 
         function redrawAnnotations() {
             if (!annotationCtx || !annotationCanvas || !stageEl) return;
+            const redrawStartedAt = performance.now();
             const ctx = annotationCtx;
             ctx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
             ctx.imageSmoothingEnabled = true;
@@ -2856,6 +2954,14 @@ export class MermaidPreviewPanel {
                         drawLaserGlow(ctx, pts, 1.0);
                     } else {
                         drawSmooth(ctx, pts, activeStroke.color, activeStroke.lineWidth, 1.0);
+                    }
+                }
+                if (activeStrokePerf) {
+                    const redrawMs = performance.now() - redrawStartedAt;
+                    activeStrokePerf.redraws += 1;
+                    activeStrokePerf.redrawTotalMs += redrawMs;
+                    if (redrawMs > activeStrokePerf.redrawMaxMs) {
+                        activeStrokePerf.redrawMaxMs = redrawMs;
                     }
                 }
             }
