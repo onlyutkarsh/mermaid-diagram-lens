@@ -2491,6 +2491,7 @@ export class MermaidPreviewPanel {
                     annotationCanvas.style.pointerEvents = 'none';
                     annotationCanvas.style.cursor = '';
                 }
+                document.body.style.cursor = '';
                 document.body.classList.remove('is-annotating');
             } else {
                 if (annotationCanvas) {
@@ -2528,31 +2529,13 @@ export class MermaidPreviewPanel {
             return 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") ' + cx + ' ' + cy + ', crosshair';
         }
 
-        function makeShapeCursor(color) {
-            const size = 16, c = 8, r = 5;
-            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '">' +
-                '<rect x="' + (c - r) + '" y="' + (c - r) + '" width="' + (r * 2) + '" height="' + (r * 2) + '" fill="' + color + '" stroke="rgba(0,0,0,0.6)" stroke-width="1.5"/>' +
-                '</svg>';
-            return 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") ' + c + ' ' + c + ', crosshair';
-        }
-
         function applyDotCursor() {
-            if (!annotationCanvas) return;
-            if (annotationMode === 'none') {
-                annotationCanvas.style.cursor = '';
-                document.body.style.cursor = '';
-                return;
-            }
-            let cursor;
+            if (annotationMode === 'none' || !annotationCanvas) return;
             if (annotationMode === 'laser') {
-                cursor = makeLaserCursor();
-            } else if (annotationMode === 'shape') {
-                cursor = makeShapeCursor(PEN_COLORS[penColorIdx]);
+                annotationCanvas.style.cursor = makeLaserCursor();
             } else {
-                cursor = makeDotCursor(PEN_COLORS[penColorIdx]);
+                annotationCanvas.style.cursor = makeDotCursor(PEN_COLORS[penColorIdx]);
             }
-            annotationCanvas.style.cursor = cursor;
-            document.body.style.cursor = cursor;
         }
 
         function activatePen() {
