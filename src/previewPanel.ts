@@ -2447,6 +2447,7 @@ export class MermaidPreviewPanel {
             annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
             annotationCanvas.addEventListener('pointermove', onAnnotationMove);
             annotationCanvas.addEventListener('pointerup', onAnnotationUp);
+            annotationCanvas.addEventListener('pointerenter', () => applyDotCursor());
             annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
             annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
 
@@ -2686,6 +2687,7 @@ export class MermaidPreviewPanel {
                 }
             }
             activeStroke = null;
+            applyDotCursor();
             scheduleAnnotationRedraw();
         }
 
