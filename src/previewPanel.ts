@@ -2440,6 +2440,7 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
+        let pendingAnnotationScheduledAt = 0;
         const PERF_LOG_INTERVAL_MS = 1000;
         let annotationStrokeSeq = 0;
         let activeStrokePerf = null;
@@ -2645,7 +2646,12 @@ export class MermaidPreviewPanel {
                 redrawTotalMs: 0,
                 redrawMaxMs: 0,
                 pointCalcTotalMs: 0,
-                scheduleSkips: 0
+                scheduleSkips: 0,
+                eventLagTotalMs: 0,
+                eventLagMaxMs: 0,
+                rafQueueTotalMs: 0,
+                rafQueueMaxMs: 0,
+                rafQueueSamples: 0
             };
             lastPerfProgressAt = 0;
             const pt = getAnnotationPoint(event);
@@ -2686,6 +2692,11 @@ export class MermaidPreviewPanel {
             if (activeStrokePerf) {
                 activeStrokePerf.moves += 1;
                 activeStrokePerf.pointCalcTotalMs += pointElapsed;
+                const eventLagMs = Math.max(0, performance.now() - event.timeStamp);
+                activeStrokePerf.eventLagTotalMs += eventLagMs;
+                if (eventLagMs > activeStrokePerf.eventLagMaxMs) {
+                    activeStrokePerf.eventLagMaxMs = eventLagMs;
+                }
             }
             if (activeStroke.mode === 'shape') {
                 activeStroke.end = pt;
@@ -2708,6 +2719,14 @@ export class MermaidPreviewPanel {
                     avgPointCalcMs: activeStrokePerf.moves > 0
                         ? Number((activeStrokePerf.pointCalcTotalMs / activeStrokePerf.moves).toFixed(3))
                         : 0,
+                    avgEventLagMs: activeStrokePerf.moves > 0
+                        ? Number((activeStrokePerf.eventLagTotalMs / activeStrokePerf.moves).toFixed(2))
+                        : 0,
+                    maxEventLagMs: Number(activeStrokePerf.eventLagMaxMs.toFixed(2)),
+                    avgRafQueueMs: activeStrokePerf.rafQueueSamples > 0
+                        ? Number((activeStrokePerf.rafQueueTotalMs / activeStrokePerf.rafQueueSamples).toFixed(2))
+                        : 0,
+                    maxRafQueueMs: Number(activeStrokePerf.rafQueueMaxMs.toFixed(2)),
                     scheduleSkips: activeStrokePerf.scheduleSkips
                 });
             }
@@ -2750,6 +2769,14 @@ export class MermaidPreviewPanel {
                     avgPointCalcMs: perfInfo.moves > 0
                         ? Number((perfInfo.pointCalcTotalMs / perfInfo.moves).toFixed(3))
                         : 0,
+                    avgEventLagMs: perfInfo.moves > 0
+                        ? Number((perfInfo.eventLagTotalMs / perfInfo.moves).toFixed(2))
+                        : 0,
+                    maxEventLagMs: Number(perfInfo.eventLagMaxMs.toFixed(2)),
+                    avgRafQueueMs: perfInfo.rafQueueSamples > 0
+                        ? Number((perfInfo.rafQueueTotalMs / perfInfo.rafQueueSamples).toFixed(2))
+                        : 0,
+                    maxRafQueueMs: Number(perfInfo.rafQueueMaxMs.toFixed(2)),
                     scheduleSkips: perfInfo.scheduleSkips
                 });
             }
@@ -2775,6 +2802,7 @@ export class MermaidPreviewPanel {
                 pendingAnnotationRedraw = null;
                 redrawAnnotations();
             });
+            pendingAnnotationScheduledAt = performance.now();
         }
 
         function drawSmooth(ctx, points, color, logicalLineWidth, alpha) {
@@ -2957,6 +2985,14 @@ export class MermaidPreviewPanel {
                     }
                 }
                 if (activeStrokePerf) {
+                    if (pendingAnnotationScheduledAt > 0) {
+                        const rafQueueMs = Math.max(0, redrawStartedAt - pendingAnnotationScheduledAt);
+                        activeStrokePerf.rafQueueSamples += 1;
+                        activeStrokePerf.rafQueueTotalMs += rafQueueMs;
+                        if (rafQueueMs > activeStrokePerf.rafQueueMaxMs) {
+                            activeStrokePerf.rafQueueMaxMs = rafQueueMs;
+                        }
+                    }
                     const redrawMs = performance.now() - redrawStartedAt;
                     activeStrokePerf.redraws += 1;
                     activeStrokePerf.redrawTotalMs += redrawMs;
@@ -2964,6 +3000,7 @@ export class MermaidPreviewPanel {
                         activeStrokePerf.redrawMaxMs = redrawMs;
                     }
                 }
+                pendingAnnotationScheduledAt = 0;
             }
         }
 
