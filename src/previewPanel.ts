@@ -2448,6 +2448,7 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
+        let activeDrawStageRect = null;
         let annotationPointerHandlersBound = false;
         let annotationResizeObserver = null;
 
@@ -2493,7 +2494,7 @@ export class MermaidPreviewPanel {
         function getAnnotationPoint(event) {
             // Use the stage's actual screen rect so scroll, padding and CSS
             // transforms are all accounted for — works correctly at any zoom level
-            const stageRect = stageEl.getBoundingClientRect();
+            const stageRect = activeDrawStageRect || stageEl.getBoundingClientRect();
             return {
                 x: (event.clientX - stageRect.left) / currentZoom,
                 y: (event.clientY - stageRect.top) / currentZoom
@@ -2639,6 +2640,7 @@ export class MermaidPreviewPanel {
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
             if (viewportEl) viewportEl.focus({ preventScroll: true });
             isDrawingAnnotation = true;
+            activeDrawStageRect = stageEl ? stageEl.getBoundingClientRect() : null;
             const pt = getAnnotationPoint(event);
             if (annotationMode === 'shape') {
                 activeStroke = {
@@ -2702,12 +2704,15 @@ export class MermaidPreviewPanel {
                 }
             }
             activeStroke = null;
+            activeDrawStageRect = null;
             scheduleAnnotationRedraw();
         }
 
         function onAnnotationLeave(event) {
             if (isDrawingAnnotation) {
                 onAnnotationUp(event);
+            } else {
+                activeDrawStageRect = null;
             }
         }
 
