@@ -2439,6 +2439,11 @@ export class MermaidPreviewPanel {
         let staticAnnotationCanvas = null;
         let staticAnnotationCtx = null;
         let staticRenderKey = '';
+        const MAX_ANNOTATION_DPR = 1.5;
+
+        function getAnnotationDpr() {
+            return Math.min(window.devicePixelRatio || 1, MAX_ANNOTATION_DPR);
+        }
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2461,7 +2466,7 @@ export class MermaidPreviewPanel {
 
         function resizeAnnotationCanvas(wrapper) {
             if (!annotationCanvas) return;
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = getAnnotationDpr();
             annotationCanvas.width = wrapper.clientWidth * dpr;
             annotationCanvas.height = wrapper.clientHeight * dpr;
             staticRenderKey = '';
@@ -2479,7 +2484,7 @@ export class MermaidPreviewPanel {
         }
 
         function diagramToCanvas(pt, offsetX, offsetY) {
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = getAnnotationDpr();
             return {
                 x: offsetX + pt.x * currentZoom * dpr,
                 y: offsetY + pt.y * currentZoom * dpr
@@ -2710,7 +2715,7 @@ export class MermaidPreviewPanel {
 
         function drawSmooth(ctx, points, color, logicalLineWidth, alpha) {
             if (points.length === 0) return;
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = getAnnotationDpr();
             const lw = logicalLineWidth * dpr;
 
             ctx.save();
@@ -2748,7 +2753,7 @@ export class MermaidPreviewPanel {
 
         function drawLaserGlow(ctx, points, alpha) {
             if (points.length === 0) return;
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = getAnnotationDpr();
 
             // Pass 1 — wide soft halo
             ctx.save();
@@ -2791,7 +2796,7 @@ export class MermaidPreviewPanel {
         }
 
         function drawShapeOnCanvas(ctx, type, s, e, color, logicalLineWidth) {
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = getAnnotationDpr();
             const lw = logicalLineWidth * dpr;
             ctx.save();
             ctx.strokeStyle = color;
@@ -2862,7 +2867,7 @@ export class MermaidPreviewPanel {
 
             // Compute stage→canvas offset once per frame using live rects so that
             // scroll, CSS padding, and all transforms are automatically included
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = getAnnotationDpr();
             const stageRect = stageEl.getBoundingClientRect();
             const canvasRect = annotationCanvas.getBoundingClientRect();
             const offsetX = (stageRect.left - canvasRect.left) * dpr;
