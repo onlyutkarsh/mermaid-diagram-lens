@@ -2537,14 +2537,22 @@ export class MermaidPreviewPanel {
         }
 
         function applyDotCursor() {
-            if (annotationMode === 'none' || !annotationCanvas) return;
-            if (annotationMode === 'laser') {
-                annotationCanvas.style.cursor = makeLaserCursor();
-            } else if (annotationMode === 'shape') {
-                annotationCanvas.style.cursor = makeShapeCursor(PEN_COLORS[penColorIdx]);
-            } else {
-                annotationCanvas.style.cursor = makeDotCursor(PEN_COLORS[penColorIdx]);
+            if (!annotationCanvas) return;
+            if (annotationMode === 'none') {
+                annotationCanvas.style.cursor = '';
+                document.body.style.cursor = '';
+                return;
             }
+            let cursor;
+            if (annotationMode === 'laser') {
+                cursor = makeLaserCursor();
+            } else if (annotationMode === 'shape') {
+                cursor = makeShapeCursor(PEN_COLORS[penColorIdx]);
+            } else {
+                cursor = makeDotCursor(PEN_COLORS[penColorIdx]);
+            }
+            annotationCanvas.style.cursor = cursor;
+            document.body.style.cursor = cursor;
         }
 
         function activatePen() {
