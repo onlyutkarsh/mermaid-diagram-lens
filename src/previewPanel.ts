@@ -1381,7 +1381,6 @@ export class MermaidPreviewPanel {
             const roundedPanX = Math.round(panX);
             const roundedPanY = Math.round(panY);
             stageEl.style.transform = 'translate(' + roundedPanX + 'px, ' + roundedPanY + 'px)';
-            annotationTransformRevision++;
             scheduleAnnotationRedraw();
         }
 
@@ -1391,7 +1390,6 @@ export class MermaidPreviewPanel {
                 el.style.transform = 'scale(' + currentZoom + ')';
             });
             document.getElementById('zoom-level').textContent = Math.round(currentZoom * 100) + '%';
-            annotationTransformRevision++;
             scheduleAnnotationRedraw();
         }
 
@@ -2436,17 +2434,6 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
-        let activeDrawStageRect = null;
-        let penStrokesRevision = 0;
-        let staticAnnotationCanvas = null;
-        let staticAnnotationCtx = null;
-        let staticRenderKey = '';
-        const MAX_ANNOTATION_DPR = 1.5;
-        let annotationTransformRevision = 0;
-
-        function getAnnotationDpr() {
-            return Math.min(window.devicePixelRatio || 1, MAX_ANNOTATION_DPR);
-        }
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2469,17 +2456,16 @@ export class MermaidPreviewPanel {
 
         function resizeAnnotationCanvas(wrapper) {
             if (!annotationCanvas) return;
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             annotationCanvas.width = wrapper.clientWidth * dpr;
             annotationCanvas.height = wrapper.clientHeight * dpr;
-            staticRenderKey = '';
             scheduleAnnotationRedraw();
         }
 
         function getAnnotationPoint(event) {
             // Use the stage's actual screen rect so scroll, padding and CSS
             // transforms are all accounted for — works correctly at any zoom level
-            const stageRect = activeDrawStageRect || stageEl.getBoundingClientRect();
+            const stageRect = stageEl.getBoundingClientRect();
             return {
                 x: (event.clientX - stageRect.left) / currentZoom,
                 y: (event.clientY - stageRect.top) / currentZoom
@@ -2487,7 +2473,7 @@ export class MermaidPreviewPanel {
         }
 
         function diagramToCanvas(pt, offsetX, offsetY) {
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             return {
                 x: offsetX + pt.x * currentZoom * dpr,
                 y: offsetY + pt.y * currentZoom * dpr
@@ -2578,11 +2564,8 @@ export class MermaidPreviewPanel {
 
         function eraseAllAnnotations() {
             penStrokes = [];
-            penStrokesRevision++;
-            staticRenderKey = '';
             laserStrokes = [];
             activeStroke = null;
-            activeDrawStageRect = null;
             if (annotationCtx) {
                 annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
             }
@@ -2610,7 +2593,7 @@ export class MermaidPreviewPanel {
         }
 
         const SHAPE_ICONS = {
-            arrow: '<span style="font-size:14px;line-height:1;" aria-hidden="true">↗</span>',
+            arrow: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="13" x2="13" y2="3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><polyline points="13,3 7,3 13,9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>',
             line:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
             rect:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="12" height="9" stroke="currentColor" stroke-width="1.8" rx="0.5" fill="none"/></svg>',
             ellipse: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="8" cy="8" rx="6" ry="4.5" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>'
@@ -2628,7 +2611,6 @@ export class MermaidPreviewPanel {
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
             if (viewportEl) viewportEl.focus({ preventScroll: true });
             isDrawingAnnotation = true;
-            activeDrawStageRect = stageEl ? stageEl.getBoundingClientRect() : null;
             const pt = getAnnotationPoint(event);
             if (annotationMode === 'shape') {
                 activeStroke = {
@@ -2659,18 +2641,7 @@ export class MermaidPreviewPanel {
             if (activeStroke.mode === 'shape') {
                 activeStroke.end = pt;
             } else {
-                const last = activeStroke.points[activeStroke.points.length - 1];
-                if (!last) {
-                    activeStroke.points.push(pt);
-                } else {
-                    const dx = pt.x - last.x;
-                    const dy = pt.y - last.y;
-                    // Keep input point density bounded to avoid very long redraw paths.
-                    const minDist = 0.8 / Math.max(currentZoom, 0.1);
-                    if ((dx * dx + dy * dy) >= (minDist * minDist)) {
-                        activeStroke.points.push(pt);
-                    }
-                }
+                activeStroke.points.push(pt);
             }
             scheduleAnnotationRedraw();
         }
@@ -2680,13 +2651,9 @@ export class MermaidPreviewPanel {
             isDrawingAnnotation = false;
             if (activeStroke.mode === 'shape') {
                 penStrokes.push(activeStroke);
-                penStrokesRevision++;
-                staticRenderKey = '';
             } else if (activeStroke.mode === 'pen') {
                 if (activeStroke.points.length > 0) {
                     penStrokes.push(activeStroke);
-                    penStrokesRevision++;
-                    staticRenderKey = '';
                 }
             } else if (activeStroke.mode === 'laser') {
                 activeStroke.startTime = Date.now();
@@ -2696,15 +2663,12 @@ export class MermaidPreviewPanel {
                 }
             }
             activeStroke = null;
-            activeDrawStageRect = null;
             scheduleAnnotationRedraw();
         }
 
         function onAnnotationLeave(event) {
             if (isDrawingAnnotation) {
                 onAnnotationUp(event);
-            } else {
-                activeDrawStageRect = null;
             }
         }
 
@@ -2718,7 +2682,7 @@ export class MermaidPreviewPanel {
 
         function drawSmooth(ctx, points, color, logicalLineWidth, alpha) {
             if (points.length === 0) return;
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             const lw = logicalLineWidth * dpr;
 
             ctx.save();
@@ -2756,7 +2720,7 @@ export class MermaidPreviewPanel {
 
         function drawLaserGlow(ctx, points, alpha) {
             if (points.length === 0) return;
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
 
             // Pass 1 — wide soft halo
             ctx.save();
@@ -2799,7 +2763,7 @@ export class MermaidPreviewPanel {
         }
 
         function drawShapeOnCanvas(ctx, type, s, e, color, logicalLineWidth) {
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             const lw = logicalLineWidth * dpr;
             ctx.save();
             ctx.strokeStyle = color;
@@ -2818,7 +2782,7 @@ export class MermaidPreviewPanel {
                 ctx.lineTo(e.x, e.y);
                 ctx.stroke();
                 const angle = Math.atan2(e.y - s.y, e.x - s.x);
-                const headLen = 14 * dpr;
+                const headLen = Math.max(12 * dpr, Math.hypot(e.x - s.x, e.y - s.y) * 0.2);
                 ctx.beginPath();
                 ctx.moveTo(e.x, e.y);
                 ctx.lineTo(e.x - headLen * Math.cos(angle - Math.PI / 6), e.y - headLen * Math.sin(angle - Math.PI / 6));
@@ -2842,25 +2806,6 @@ export class MermaidPreviewPanel {
             ctx.restore();
         }
 
-        function ensureStaticAnnotationCanvas() {
-            if (!annotationCanvas) return false;
-            if (!staticAnnotationCanvas) {
-                staticAnnotationCanvas = document.createElement('canvas');
-                staticAnnotationCtx = staticAnnotationCanvas.getContext('2d');
-                staticRenderKey = '';
-            }
-            if (!staticAnnotationCtx) return false;
-            if (
-                staticAnnotationCanvas.width !== annotationCanvas.width ||
-                staticAnnotationCanvas.height !== annotationCanvas.height
-            ) {
-                staticAnnotationCanvas.width = annotationCanvas.width;
-                staticAnnotationCanvas.height = annotationCanvas.height;
-                staticRenderKey = '';
-            }
-            return true;
-        }
-
         function redrawAnnotations() {
             if (!annotationCtx || !annotationCanvas || !stageEl) return;
             const ctx = annotationCtx;
@@ -2870,46 +2815,22 @@ export class MermaidPreviewPanel {
 
             // Compute stage→canvas offset once per frame using live rects so that
             // scroll, CSS padding, and all transforms are automatically included
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             const stageRect = stageEl.getBoundingClientRect();
             const canvasRect = annotationCanvas.getBoundingClientRect();
             const offsetX = (stageRect.left - canvasRect.left) * dpr;
             const offsetY = (stageRect.top - canvasRect.top) * dpr;
 
             const toCanvas = pt => diagramToCanvas(pt, offsetX, offsetY);
-            const renderKey =
-                annotationCanvas.width + '|' +
-                annotationCanvas.height + '|' +
-                annotationTransformRevision + '|' +
-                penStrokesRevision;
 
-            // Persistent strokes are rendered onto an offscreen layer and reused
-            // while the user draws, so each move frame stays lightweight.
-            if (ensureStaticAnnotationCanvas()) {
-                if (staticRenderKey !== renderKey) {
-                    staticAnnotationCtx.clearRect(0, 0, staticAnnotationCanvas.width, staticAnnotationCanvas.height);
-                    for (const stroke of penStrokes) {
-                        if (stroke.mode === 'shape') {
-                            drawShapeOnCanvas(staticAnnotationCtx, stroke.shapeType,
-                                toCanvas(stroke.start), toCanvas(stroke.end),
-                                stroke.color, stroke.lineWidth);
-                        } else {
-                            drawSmooth(staticAnnotationCtx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
-                        }
-                    }
-                    staticRenderKey = renderKey;
-                }
-                ctx.drawImage(staticAnnotationCanvas, 0, 0);
-            } else {
-                // Fallback path if offscreen layer cannot be created.
-                for (const stroke of penStrokes) {
-                    if (stroke.mode === 'shape') {
-                        drawShapeOnCanvas(ctx, stroke.shapeType,
-                            toCanvas(stroke.start), toCanvas(stroke.end),
-                            stroke.color, stroke.lineWidth);
-                    } else {
-                        drawSmooth(ctx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
-                    }
+            // Persistent pen + shape strokes
+            for (const stroke of penStrokes) {
+                if (stroke.mode === 'shape') {
+                    drawShapeOnCanvas(ctx, stroke.shapeType,
+                        toCanvas(stroke.start), toCanvas(stroke.end),
+                        stroke.color, stroke.lineWidth);
+                } else {
+                    drawSmooth(ctx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
                 }
             }
 
