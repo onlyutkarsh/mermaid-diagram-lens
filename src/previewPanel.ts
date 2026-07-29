@@ -650,6 +650,7 @@ export class MermaidPreviewPanel {
 			'Annotation:',
 			'  p            Pen (cycles red → blue → green)',
 			'  l            Laser pointer (fades automatically)',
+			'  s            Shape (cycles arrow → line → rect → ellipse)',
 			'  e            Erase all annotations',
 			'  Esc          Exit annotation mode',
 			'',
@@ -2255,6 +2256,12 @@ export class MermaidPreviewPanel {
                         eraseAllAnnotations();
                         break;
 
+                    // Annotation: shapes (cycles arrow→line→rect→ellipse)
+                    case 's':
+                        event.preventDefault();
+                        toggleShapeMode();
+                        break;
+
                     // Exit annotation mode (back to grab/pan)
                     case 'escape':
                         event.preventDefault();
@@ -2365,6 +2372,11 @@ export class MermaidPreviewPanel {
                 penBtn.addEventListener('click', cyclePenColor);
             }
 
+            const shapeBtn = document.getElementById('shape-btn');
+            if (shapeBtn) {
+                shapeBtn.addEventListener('click', toggleShapeMode);
+            }
+
             const laserBtn = document.getElementById('laser-btn');
             if (laserBtn) {
                 laserBtn.addEventListener('click', toggleLaser);
@@ -2384,6 +2396,9 @@ export class MermaidPreviewPanel {
         const PEN_COLORS = ['#ef4444', '#3b82f6', '#22c55e']; // red, blue, green
         const LASER_COLOR = '#ff3333';
         const LASER_DURATION_MS = 2000;
+        const SHAPES = ['arrow', 'line', 'rect', 'ellipse'];
+        let shapeIdx = 0;
+        let currentShape = SHAPES[0];
 
         let annotationCanvas = null;
         let annotationCtx = null;
@@ -2408,6 +2423,9 @@ export class MermaidPreviewPanel {
             annotationCanvas.addEventListener('pointerup', onAnnotationUp);
             annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
             annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
+
+            // Populate shape icon on first render
+            updateShapeIcon();
         }
 
         function resizeAnnotationCanvas(wrapper) {
@@ -2510,6 +2528,16 @@ export class MermaidPreviewPanel {
             }
         }
 
+        function toggleShapeMode() {
+            if (annotationMode === 'shape') {
+                shapeIdx = (shapeIdx + 1) % SHAPES.length;
+                currentShape = SHAPES[shapeIdx];
+            } else {
+                setAnnotationMode('shape');
+            }
+            updateAnnotationUI();
+        }
+
         function eraseAllAnnotations() {
             penStrokes = [];
             laserStrokes = [];
@@ -2532,7 +2560,24 @@ export class MermaidPreviewPanel {
             if (laserBtn) {
                 laserBtn.classList.toggle('annotation-active', annotationMode === 'laser');
             }
+            const shapeBtn = document.getElementById('shape-btn');
+            if (shapeBtn) {
+                shapeBtn.classList.toggle('annotation-active', annotationMode === 'shape');
+            }
+            updateShapeIcon();
             applyDotCursor();
+        }
+
+        const SHAPE_ICONS = {
+            arrow: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="13" x2="13" y2="3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><polyline points="13,3 7,3 13,9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>',
+            line:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+            rect:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="12" height="9" stroke="currentColor" stroke-width="1.8" rx="0.5" fill="none"/></svg>',
+            ellipse: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="8" cy="8" rx="6" ry="4.5" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>'
+        };
+
+        function updateShapeIcon() {
+            const el = document.getElementById('shape-icon');
+            if (el) el.innerHTML = SHAPE_ICONS[currentShape] || SHAPE_ICONS.arrow;
         }
 
         function onAnnotationDown(event) {
@@ -2543,13 +2588,24 @@ export class MermaidPreviewPanel {
             if (viewportEl) viewportEl.focus({ preventScroll: true });
             isDrawingAnnotation = true;
             const pt = getAnnotationPoint(event);
-            activeStroke = {
-                points: [pt],
-                color: annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx],
-                lineWidth: annotationMode === 'laser' ? 4 : 3,
-                mode: annotationMode,
-                startTime: null
-            };
+            if (annotationMode === 'shape') {
+                activeStroke = {
+                    mode: 'shape',
+                    shapeType: currentShape,
+                    start: pt,
+                    end: pt,
+                    color: PEN_COLORS[penColorIdx],
+                    lineWidth: 3
+                };
+            } else {
+                activeStroke = {
+                    points: [pt],
+                    color: annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx],
+                    lineWidth: annotationMode === 'laser' ? 4 : 3,
+                    mode: annotationMode,
+                    startTime: null
+                };
+            }
             annotationCanvas.setPointerCapture(event.pointerId);
             scheduleAnnotationRedraw();
         }
@@ -2557,14 +2613,21 @@ export class MermaidPreviewPanel {
         function onAnnotationMove(event) {
             if (!isDrawingAnnotation || !activeStroke) return;
             event.preventDefault();
-            activeStroke.points.push(getAnnotationPoint(event));
+            const pt = getAnnotationPoint(event);
+            if (activeStroke.mode === 'shape') {
+                activeStroke.end = pt;
+            } else {
+                activeStroke.points.push(pt);
+            }
             scheduleAnnotationRedraw();
         }
 
         function onAnnotationUp(event) {
             if (!isDrawingAnnotation || !activeStroke) return;
             isDrawingAnnotation = false;
-            if (activeStroke.mode === 'pen') {
+            if (activeStroke.mode === 'shape') {
+                penStrokes.push(activeStroke);
+            } else if (activeStroke.mode === 'pen') {
                 if (activeStroke.points.length > 0) {
                     penStrokes.push(activeStroke);
                 }
@@ -2675,6 +2738,50 @@ export class MermaidPreviewPanel {
             ctx.stroke();
         }
 
+        function drawShapeOnCanvas(ctx, type, s, e, color, logicalLineWidth) {
+            const dpr = window.devicePixelRatio || 1;
+            const lw = logicalLineWidth * dpr;
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lw;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            if (type === 'line') {
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(e.x, e.y);
+                ctx.stroke();
+            } else if (type === 'arrow') {
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(e.x, e.y);
+                ctx.stroke();
+                const angle = Math.atan2(e.y - s.y, e.x - s.x);
+                const headLen = Math.max(12 * dpr, Math.hypot(e.x - s.x, e.y - s.y) * 0.2);
+                ctx.beginPath();
+                ctx.moveTo(e.x, e.y);
+                ctx.lineTo(e.x - headLen * Math.cos(angle - Math.PI / 6), e.y - headLen * Math.sin(angle - Math.PI / 6));
+                ctx.moveTo(e.x, e.y);
+                ctx.lineTo(e.x - headLen * Math.cos(angle + Math.PI / 6), e.y - headLen * Math.sin(angle + Math.PI / 6));
+                ctx.stroke();
+            } else if (type === 'rect') {
+                ctx.beginPath();
+                ctx.strokeRect(s.x, s.y, e.x - s.x, e.y - s.y);
+            } else if (type === 'ellipse') {
+                const rx = Math.abs(e.x - s.x) / 2;
+                const ry = Math.abs(e.y - s.y) / 2;
+                const cx = (s.x + e.x) / 2;
+                const cy = (s.y + e.y) / 2;
+                if (rx > 0 && ry > 0) {
+                    ctx.beginPath();
+                    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+
         function redrawAnnotations() {
             if (!annotationCtx || !annotationCanvas || !stageEl) return;
             const ctx = annotationCtx;
@@ -2692,9 +2799,15 @@ export class MermaidPreviewPanel {
 
             const toCanvas = pt => diagramToCanvas(pt, offsetX, offsetY);
 
-            // Persistent pen strokes
+            // Persistent pen + shape strokes
             for (const stroke of penStrokes) {
-                drawSmooth(ctx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
+                if (stroke.mode === 'shape') {
+                    drawShapeOnCanvas(ctx, stroke.shapeType,
+                        toCanvas(stroke.start), toCanvas(stroke.end),
+                        stroke.color, stroke.lineWidth);
+                } else {
+                    drawSmooth(ctx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
+                }
             }
 
             // Laser strokes with fade-out
@@ -2708,12 +2821,18 @@ export class MermaidPreviewPanel {
             }
 
             // Active stroke being drawn right now
-            if (activeStroke && activeStroke.points.length > 0) {
-                const pts = activeStroke.points.map(toCanvas);
-                if (activeStroke.mode === 'laser') {
-                    drawLaserGlow(ctx, pts, 1.0);
-                } else {
-                    drawSmooth(ctx, pts, activeStroke.color, activeStroke.lineWidth, 1.0);
+            if (activeStroke) {
+                if (activeStroke.mode === 'shape') {
+                    drawShapeOnCanvas(ctx, activeStroke.shapeType,
+                        toCanvas(activeStroke.start), toCanvas(activeStroke.end),
+                        activeStroke.color, activeStroke.lineWidth);
+                } else if (activeStroke.points && activeStroke.points.length > 0) {
+                    const pts = activeStroke.points.map(toCanvas);
+                    if (activeStroke.mode === 'laser') {
+                        drawLaserGlow(ctx, pts, 1.0);
+                    } else {
+                        drawSmooth(ctx, pts, activeStroke.color, activeStroke.lineWidth, 1.0);
+                    }
                 }
             }
         }
@@ -3236,6 +3355,9 @@ export class MermaidPreviewPanel {
         <div class="toolbar-group annotation-tools-group">
             <button class="annotation-tool-btn" id="pen-btn" title="Pen (P — cycles red→blue→green)" aria-label="Pen annotation tool">
                 <span class="pen-dot" id="pen-dot"></span>
+            </button>
+            <button class="annotation-tool-btn" id="shape-btn" title="Shape (S — cycles arrow→line→rect→ellipse)" aria-label="Shape annotation tool">
+                <span id="shape-icon" aria-hidden="true"></span>
             </button>
             <button class="annotation-tool-btn" id="laser-btn" title="Laser pointer (L)" aria-label="Laser annotation tool">
                 <span class="codicon codicon-record" aria-hidden="true" style="color:#ff3333;font-size:14px;"></span>
