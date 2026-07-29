@@ -2447,7 +2447,6 @@ export class MermaidPreviewPanel {
             annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
             annotationCanvas.addEventListener('pointermove', onAnnotationMove);
             annotationCanvas.addEventListener('pointerup', onAnnotationUp);
-            annotationCanvas.addEventListener('pointerenter', () => applyDotCursor());
             annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
             annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
 
@@ -2491,7 +2490,6 @@ export class MermaidPreviewPanel {
                     annotationCanvas.style.pointerEvents = 'none';
                     annotationCanvas.style.cursor = '';
                 }
-                document.body.style.cursor = '';
                 document.body.classList.remove('is-annotating');
             } else {
                 if (annotationCanvas) {
@@ -2665,7 +2663,6 @@ export class MermaidPreviewPanel {
                 }
             }
             activeStroke = null;
-            applyDotCursor();
             scheduleAnnotationRedraw();
         }
 
