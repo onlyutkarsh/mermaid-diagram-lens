@@ -2660,7 +2660,8 @@ export class MermaidPreviewPanel {
                 eventLagMaxMs: 0,
                 rafQueueTotalMs: 0,
                 rafQueueMaxMs: 0,
-                rafQueueSamples: 0
+                rafQueueSamples: 0,
+                firstPaintMs: null
             };
             lastPerfProgressAt = 0;
             const pt = getAnnotationPoint(event);
@@ -2685,7 +2686,7 @@ export class MermaidPreviewPanel {
             if (event.pointerType !== 'mouse') {
                 annotationCanvas.setPointerCapture(event.pointerId);
             }
-            scheduleAnnotationRedraw();
+            requestAnnotationRedraw(true);
             postAnnotationPerf('strokeStart', {
                 id: activeStrokePerf.id,
                 mode: activeStrokePerf.mode,
@@ -2731,7 +2732,7 @@ export class MermaidPreviewPanel {
                     activeStroke.points.push(pt);
                 }
             }
-            scheduleAnnotationRedraw();
+            requestAnnotationRedraw(true);
             const now = performance.now();
             if (activeStrokePerf && (now - lastPerfProgressAt) >= PERF_LOG_INTERVAL_MS) {
                 lastPerfProgressAt = now;
@@ -2755,6 +2756,9 @@ export class MermaidPreviewPanel {
                         ? Number((activeStrokePerf.rafQueueTotalMs / activeStrokePerf.rafQueueSamples).toFixed(2))
                         : 0,
                     maxRafQueueMs: Number(activeStrokePerf.rafQueueMaxMs.toFixed(2)),
+                    firstPaintMs: activeStrokePerf.firstPaintMs === null
+                        ? null
+                        : Number(activeStrokePerf.firstPaintMs.toFixed(2)),
                     scheduleSkips: activeStrokePerf.scheduleSkips
                 });
             }
@@ -2806,19 +2810,34 @@ export class MermaidPreviewPanel {
                         ? Number((perfInfo.rafQueueTotalMs / perfInfo.rafQueueSamples).toFixed(2))
                         : 0,
                     maxRafQueueMs: Number(perfInfo.rafQueueMaxMs.toFixed(2)),
+                    firstPaintMs: perfInfo.firstPaintMs === null
+                        ? null
+                        : Number(perfInfo.firstPaintMs.toFixed(2)),
                     scheduleSkips: perfInfo.scheduleSkips
                 });
             }
             activeStroke = null;
             activeStrokePerf = null;
             usingRawPointerInput = false;
-            scheduleAnnotationRedraw();
+            requestAnnotationRedraw(true);
         }
 
         function onAnnotationLeave(event) {
             if (isDrawingAnnotation) {
                 onAnnotationUp(event);
             }
+        }
+
+        function requestAnnotationRedraw(immediate) {
+            if (immediate) {
+                if (pendingAnnotationRedraw) {
+                    cancelAnimationFrame(pendingAnnotationRedraw);
+                    pendingAnnotationRedraw = null;
+                }
+                redrawAnnotations();
+                return;
+            }
+            scheduleAnnotationRedraw();
         }
 
         function scheduleAnnotationRedraw() {
@@ -3015,6 +3034,9 @@ export class MermaidPreviewPanel {
                     }
                 }
                 if (activeStrokePerf) {
+                    if (activeStrokePerf.firstPaintMs === null) {
+                        activeStrokePerf.firstPaintMs = redrawStartedAt - activeStrokePerf.startTs;
+                    }
                     if (pendingAnnotationScheduledAt > 0) {
                         const rafQueueMs = Math.max(0, redrawStartedAt - pendingAnnotationScheduledAt);
                         activeStrokePerf.rafQueueSamples += 1;
