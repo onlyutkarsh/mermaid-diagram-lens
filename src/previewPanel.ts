@@ -647,6 +647,12 @@ export class MermaidPreviewPanel {
 			'Pan:',
 			'  ↑ ↓ ← →      Arrow keys to pan around',
 			'',
+			'Annotation:',
+			'  p            Pen (cycles red → blue → green)',
+			'  l            Laser pointer (fades automatically)',
+			'  e            Erase all annotations',
+			'  Esc          Exit annotation mode',
+			'',
 		].join('\n');
 
 		vscode.window.showInformationMessage(message, { modal: true, detail });
@@ -2240,6 +2246,12 @@ export class MermaidPreviewPanel {
                         eraseAllAnnotations();
                         break;
 
+                    // Exit annotation mode (back to grab/pan)
+                    case 'escape':
+                        event.preventDefault();
+                        setAnnotationMode('none');
+                        break;
+
                     // Pan with arrow keys (smooth movement)
                     case 'arrowup':
                         event.preventDefault();
@@ -2408,19 +2420,26 @@ export class MermaidPreviewPanel {
 
         function setAnnotationMode(mode) {
             annotationMode = mode;
+            if (!annotationCanvas) {
+                annotationCanvas = document.getElementById('annotation-canvas');
+            }
             if (mode === 'none') {
-                annotationCanvas.style.pointerEvents = 'none';
-                annotationCanvas.style.cursor = '';
+                if (annotationCanvas) {
+                    annotationCanvas.style.pointerEvents = 'none';
+                    annotationCanvas.style.cursor = '';
+                }
                 document.body.classList.remove('is-annotating');
             } else {
-                annotationCanvas.style.pointerEvents = 'all';
+                if (annotationCanvas) {
+                    annotationCanvas.style.pointerEvents = 'all';
+                }
                 document.body.classList.add('is-annotating');
             }
             updateAnnotationUI();
         }
 
         function makeDotCursor(color) {
-            const r = 6; // radius of the dot
+            const r = 6;
             const size = r * 2 + 2;
             const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '">' +
                 '<circle cx="' + (r + 1) + '" cy="' + (r + 1) + '" r="' + r + '" fill="' + color + '" stroke="rgba(0,0,0,0.6)" stroke-width="1.5"/>' +
@@ -2429,7 +2448,7 @@ export class MermaidPreviewPanel {
         }
 
         function applyDotCursor() {
-            if (annotationMode === 'none') return;
+            if (annotationMode === 'none' || !annotationCanvas) return;
             const color = annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx];
             annotationCanvas.style.cursor = makeDotCursor(color);
         }
