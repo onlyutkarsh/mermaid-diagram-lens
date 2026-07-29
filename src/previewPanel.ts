@@ -2648,6 +2648,7 @@ export class MermaidPreviewPanel {
                 id: annotationStrokeSeq,
                 mode: annotationMode,
                 shapeType: annotationMode === 'shape' ? currentShape : null,
+                pointerType: event.pointerType || 'unknown',
                 startTs: performance.now(),
                 moves: 0,
                 redraws: 0,
@@ -2681,12 +2682,15 @@ export class MermaidPreviewPanel {
                     startTime: null
                 };
             }
-            annotationCanvas.setPointerCapture(event.pointerId);
+            if (event.pointerType !== 'mouse') {
+                annotationCanvas.setPointerCapture(event.pointerId);
+            }
             scheduleAnnotationRedraw();
             postAnnotationPerf('strokeStart', {
                 id: activeStrokePerf.id,
                 mode: activeStrokePerf.mode,
                 shapeType: activeStrokePerf.shapeType,
+                pointerType: activeStrokePerf.pointerType,
                 zoom: currentZoom
             });
         }
@@ -2782,6 +2786,7 @@ export class MermaidPreviewPanel {
                     id: perfInfo.id,
                     mode: perfInfo.mode,
                     shapeType: perfInfo.shapeType,
+                    pointerType: perfInfo.pointerType,
                     durationMs: Number(durationMs.toFixed(2)),
                     moves: perfInfo.moves,
                     pointCount,
