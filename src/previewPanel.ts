@@ -2594,9 +2594,9 @@ export class MermaidPreviewPanel {
 
         const SHAPE_ICONS = {
             arrow: '<span class="codicon codicon-arrow-right" style="font-size:14px;" aria-hidden="true"></span>',
-            line:  '<span class="codicon codicon-dash" style="font-size:14px;" aria-hidden="true"></span>',
-            rect:  '<span style="font-size:12px;line-height:1;display:inline-block;border:1.5px solid currentColor;width:12px;height:9px;vertical-align:middle;" aria-hidden="true"></span>',
-            ellipse: '<span class="codicon codicon-circle-outline" style="font-size:14px;" aria-hidden="true"></span>'
+            line:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+            rect:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="12" height="9" stroke="currentColor" stroke-width="1.8" rx="0.5" fill="none"/></svg>',
+            ellipse: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="8" cy="8" rx="6" ry="4.5" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>'
         };
 
         function updateShapeIcon() {
