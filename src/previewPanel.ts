@@ -2454,10 +2454,31 @@ export class MermaidPreviewPanel {
             return 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") ' + (r + 1) + ' ' + (r + 1) + ', crosshair';
         }
 
+        function makeLaserCursor() {
+            // Larger canvas to fit the glow halo
+            const cx = 14, cy = 14, size = 28;
+            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '">' +
+                '<defs>' +
+                  '<radialGradient id="g" cx="50%" cy="50%" r="50%">' +
+                    '<stop offset="0%"   stop-color="#ff6600" stop-opacity="0.6"/>' +
+                    '<stop offset="60%"  stop-color="#ff3333" stop-opacity="0.25"/>' +
+                    '<stop offset="100%" stop-color="#ff0000" stop-opacity="0"/>' +
+                  '</radialGradient>' +
+                '</defs>' +
+                '<circle cx="' + cx + '" cy="' + cy + '" r="13" fill="url(#g)"/>' +
+                '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="#ff3333" stroke="#ffffff" stroke-width="1.2" opacity="0.9"/>' +
+                '<circle cx="' + cx + '" cy="' + cy + '" r="2" fill="#ffffff" opacity="0.95"/>' +
+                '</svg>';
+            return 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") ' + cx + ' ' + cy + ', crosshair';
+        }
+
         function applyDotCursor() {
             if (annotationMode === 'none' || !annotationCanvas) return;
-            const color = annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx];
-            annotationCanvas.style.cursor = makeDotCursor(color);
+            if (annotationMode === 'laser') {
+                annotationCanvas.style.cursor = makeLaserCursor();
+            } else {
+                annotationCanvas.style.cursor = makeDotCursor(PEN_COLORS[penColorIdx]);
+            }
         }
 
         function cyclePenColor() {
@@ -3140,21 +3161,6 @@ export class MermaidPreviewPanel {
             transition: background-color 0.15s;
         }
 
-        .laser-dot {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background-color: #ff3333;
-            flex-shrink: 0;
-            box-shadow: 0 0 4px 2px rgba(255, 60, 0, 0.7), 0 0 10px 4px rgba(255, 80, 0, 0.4);
-            transition: box-shadow 0.15s;
-        }
-
-        #laser-btn.annotation-active .laser-dot {
-            box-shadow: 0 0 6px 3px rgba(255, 60, 0, 0.95), 0 0 14px 6px rgba(255, 80, 0, 0.6);
-        }
-
         /* Suppress system cursor when annotating — canvas sets its own dot cursor */
         body.is-annotating #diagram-viewport,
         body.is-annotating #diagram-stage,
@@ -3210,7 +3216,7 @@ export class MermaidPreviewPanel {
                 <span class="pen-dot" id="pen-dot"></span>
             </button>
             <button class="annotation-tool-btn" id="laser-btn" title="Laser pointer (L)" aria-label="Laser annotation tool">
-                <span class="laser-dot" aria-hidden="true"></span>
+                <span class="codicon codicon-record" aria-hidden="true" style="color:#ff3333;font-size:14px;"></span>
             </button>
             <button class="annotation-tool-btn" id="erase-annotation-btn" title="Erase all annotations (E)" aria-label="Erase all annotations">
                 <span class="codicon codicon-clear-all" aria-hidden="true"></span>
