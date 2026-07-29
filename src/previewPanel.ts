@@ -2527,10 +2527,33 @@ export class MermaidPreviewPanel {
             return 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") ' + cx + ' ' + cy + ', crosshair';
         }
 
+        function makeShapeCursor(shape) {
+            const size = 28, c = 14;
+            const color = PEN_COLORS[penColorIdx];
+            const stroke = 'stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"';
+            let body;
+            if (shape === 'arrow') {
+                body = '<line x1="6" y1="22" x2="20" y2="8" ' + stroke + '/>' +
+                       '<polyline points="11,8 20,8 20,17" ' + stroke + '/>';
+            } else if (shape === 'line') {
+                body = '<line x1="6" y1="22" x2="22" y2="6" ' + stroke + '/>';
+            } else if (shape === 'rect') {
+                body = '<rect x="6" y="9" width="16" height="12" ' + stroke + '/>';
+            } else {
+                body = '<ellipse cx="14" cy="15" rx="9" ry="6" ' + stroke + '/>';
+            }
+            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '">' +
+                '<circle cx="' + c + '" cy="' + c + '" r="2" fill="' + color + '" opacity="0.7"/>' +
+                body + '</svg>';
+            return 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") ' + c + ' ' + c + ', crosshair';
+        }
+
         function applyDotCursor() {
             if (annotationMode === 'none' || !annotationCanvas) return;
             if (annotationMode === 'laser') {
                 annotationCanvas.style.cursor = makeLaserCursor();
+            } else if (annotationMode === 'shape') {
+                annotationCanvas.style.cursor = makeShapeCursor(currentShape);
             } else {
                 annotationCanvas.style.cursor = makeDotCursor(PEN_COLORS[penColorIdx]);
             }
