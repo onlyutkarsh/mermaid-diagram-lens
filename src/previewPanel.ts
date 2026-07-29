@@ -2362,7 +2362,7 @@ export class MermaidPreviewPanel {
         let penColorIdx = 0;
         const PEN_COLORS = ['#ef4444', '#3b82f6', '#22c55e']; // red, blue, green
         const LASER_COLOR = '#ff3333';
-        const LASER_DURATION_MS = 1000;
+        const LASER_DURATION_MS = 2000;
 
         let annotationCanvas = null;
         let annotationCtx = null;
