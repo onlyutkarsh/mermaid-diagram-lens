@@ -2603,20 +2603,31 @@ export class MermaidPreviewPanel {
             if (points.length === 0) return;
             const dpr = window.devicePixelRatio || 1;
 
-            // Outer glow pass
+            // Pass 1 — wide soft halo
             ctx.save();
-            ctx.globalAlpha = alpha * 0.35;
-            ctx.strokeStyle = LASER_COLOR;
-            ctx.lineWidth = 10 * dpr;
+            ctx.globalAlpha = alpha * 0.25;
+            ctx.strokeStyle = '#ff6600';
+            ctx.lineWidth = 18 * dpr;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.filter = 'blur(' + (2 * dpr) + 'px)';
+            ctx.filter = 'blur(' + (4 * dpr) + 'px)';
             drawPathOnly(ctx, points);
             ctx.restore();
 
-            // Inner bright pass
-            drawSmooth(ctx, points, '#ffffff', 2, alpha * 0.7);
-            drawSmooth(ctx, points, LASER_COLOR, 3, alpha);
+            // Pass 2 — mid glow
+            ctx.save();
+            ctx.globalAlpha = alpha * 0.5;
+            ctx.strokeStyle = LASER_COLOR;
+            ctx.lineWidth = 8 * dpr;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.filter = 'blur(' + (1.5 * dpr) + 'px)';
+            drawPathOnly(ctx, points);
+            ctx.restore();
+
+            // Pass 3 — bright core + white spine
+            drawSmooth(ctx, points, LASER_COLOR, 3.5, alpha);
+            drawSmooth(ctx, points, '#ffffff', 1.2, alpha * 0.8);
         }
 
         function drawPathOnly(ctx, points) {
@@ -3129,6 +3140,21 @@ export class MermaidPreviewPanel {
             transition: background-color 0.15s;
         }
 
+        .laser-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #ff3333;
+            flex-shrink: 0;
+            box-shadow: 0 0 4px 2px rgba(255, 60, 0, 0.7), 0 0 10px 4px rgba(255, 80, 0, 0.4);
+            transition: box-shadow 0.15s;
+        }
+
+        #laser-btn.annotation-active .laser-dot {
+            box-shadow: 0 0 6px 3px rgba(255, 60, 0, 0.95), 0 0 14px 6px rgba(255, 80, 0, 0.6);
+        }
+
         /* Suppress system cursor when annotating — canvas sets its own dot cursor */
         body.is-annotating #diagram-viewport,
         body.is-annotating #diagram-stage,
@@ -3184,7 +3210,7 @@ export class MermaidPreviewPanel {
                 <span class="pen-dot" id="pen-dot"></span>
             </button>
             <button class="annotation-tool-btn" id="laser-btn" title="Laser pointer (L)" aria-label="Laser annotation tool">
-                <span class="codicon codicon-record" aria-hidden="true" style="color:#ff3333;font-size:14px;"></span>
+                <span class="laser-dot" aria-hidden="true"></span>
             </button>
             <button class="annotation-tool-btn" id="erase-annotation-btn" title="Erase all annotations (E)" aria-label="Erase all annotations">
                 <span class="codicon codicon-clear-all" aria-hidden="true"></span>
