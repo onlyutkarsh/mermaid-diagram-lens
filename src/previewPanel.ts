@@ -1383,7 +1383,9 @@ export class MermaidPreviewPanel {
             const roundedPanX = Math.round(panX);
             const roundedPanY = Math.round(panY);
             stageEl.style.transform = 'translate(' + roundedPanX + 'px, ' + roundedPanY + 'px)';
-            scheduleAnnotationRedraw();
+            if (penStrokes.length > 0 || laserStrokes.length > 0 || activeStroke) {
+                scheduleAnnotationRedraw();
+            }
         }
 
         function applyZoomScale() {
@@ -1392,7 +1394,9 @@ export class MermaidPreviewPanel {
                 el.style.transform = 'scale(' + currentZoom + ')';
             });
             document.getElementById('zoom-level').textContent = Math.round(currentZoom * 100) + '%';
-            scheduleAnnotationRedraw();
+            if (penStrokes.length > 0 || laserStrokes.length > 0 || activeStroke) {
+                scheduleAnnotationRedraw();
+            }
         }
 
         window.zoomIn = function() {
@@ -2665,7 +2669,18 @@ export class MermaidPreviewPanel {
             if (activeStroke.mode === 'shape') {
                 activeStroke.end = pt;
             } else {
-                activeStroke.points.push(pt);
+                const last = activeStroke.points[activeStroke.points.length - 1];
+                if (!last) {
+                    activeStroke.points.push(pt);
+                } else {
+                    const dx = pt.x - last.x;
+                    const dy = pt.y - last.y;
+                    // Keep point density bounded in screen-space to avoid heavy redraws
+                    const minDist = 0.8 / Math.max(currentZoom, 0.1);
+                    if ((dx * dx + dy * dy) >= (minDist * minDist)) {
+                        activeStroke.points.push(pt);
+                    }
+                }
             }
             scheduleAnnotationRedraw();
         }
@@ -2836,6 +2851,10 @@ export class MermaidPreviewPanel {
             ctx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
+
+            if (penStrokes.length === 0 && laserStrokes.length === 0 && !activeStroke) {
+                return;
+            }
 
             // Compute stage→canvas offset once per frame using live rects so that
             // scroll, CSS padding, and all transforms are automatically included
