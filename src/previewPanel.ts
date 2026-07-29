@@ -642,16 +642,17 @@ export class MermaidPreviewPanel {
 			'Zoom:',
 			'  +  or  =     Zoom in',
 			'  -            Zoom out',
-			'  r            Reset view',
+			'  0            Reset view',
 			'',
 			'Pan:',
 			'  ↑ ↓ ← →      Arrow keys to pan around',
 			'',
 			'Annotation:',
-			'  p            Pen (cycles red → blue → green)',
+			'  p            Pen tool',
+			'  s            Shape tool (cycles arrow → line → rect → ellipse)',
 			'  l            Laser pointer (fades automatically)',
-			'  s            Shape (cycles arrow → line → rect → ellipse)',
 			'  e            Erase all annotations',
+			'  r / g / b    Set color red / green / blue (pen & shape only)',
 			'  Esc          Exit annotation mode',
 			'',
 		].join('\n');
@@ -2232,16 +2233,41 @@ export class MermaidPreviewPanel {
                         zoomOut();
                         break;
 
-                    // Reset view with r
-                    case 'r':
+                    // Reset view with 0
+                    case '0':
                         event.preventDefault();
                         zoomReset();
                         break;
 
-                    // Annotation: pen tool (cycles colors)
+                    // Annotation: pen tool
                     case 'p':
                         event.preventDefault();
-                        cyclePenColor();
+                        activatePen();
+                        break;
+
+                    // Annotation: set color (pen & shape only)
+                    case 'r':
+                        event.preventDefault();
+                        if (annotationMode === 'pen' || annotationMode === 'shape') {
+                            penColorIdx = 0; // red
+                            updateAnnotationUI();
+                        }
+                        break;
+
+                    case 'g':
+                        event.preventDefault();
+                        if (annotationMode === 'pen' || annotationMode === 'shape') {
+                            penColorIdx = 2; // green
+                            updateAnnotationUI();
+                        }
+                        break;
+
+                    case 'b':
+                        event.preventDefault();
+                        if (annotationMode === 'pen' || annotationMode === 'shape') {
+                            penColorIdx = 1; // blue
+                            updateAnnotationUI();
+                        }
                         break;
 
                     // Annotation: laser pointer
@@ -2369,7 +2395,7 @@ export class MermaidPreviewPanel {
 
             const penBtn = document.getElementById('pen-btn');
             if (penBtn) {
-                penBtn.addEventListener('click', cyclePenColor);
+                penBtn.addEventListener('click', activatePen);
             }
 
             const shapeBtn = document.getElementById('shape-btn');
@@ -2510,10 +2536,8 @@ export class MermaidPreviewPanel {
             }
         }
 
-        function cyclePenColor() {
-            if (annotationMode === 'pen') {
-                penColorIdx = (penColorIdx + 1) % PEN_COLORS.length;
-            } else {
+        function activatePen() {
+            if (annotationMode !== 'pen') {
                 setAnnotationMode('pen');
             }
             applyDotCursor();
@@ -3353,7 +3377,7 @@ export class MermaidPreviewPanel {
             </span>
         </div>
         <div class="toolbar-group annotation-tools-group">
-            <button class="annotation-tool-btn" id="pen-btn" title="Pen (P — cycles red→blue→green)" aria-label="Pen annotation tool">
+            <button class="annotation-tool-btn" id="pen-btn" title="Pen (P)" aria-label="Pen annotation tool">
                 <span class="pen-dot" id="pen-dot"></span>
             </button>
             <button class="annotation-tool-btn" id="shape-btn" title="Shape (S — cycles arrow→line→rect→ellipse)" aria-label="Shape annotation tool">
