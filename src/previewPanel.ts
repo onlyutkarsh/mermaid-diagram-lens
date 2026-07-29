@@ -1113,6 +1113,8 @@ export class MermaidPreviewPanel {
         let pendingZoomUpdate = null;
         let lastParseError = null;
         let annotationMode = 'none'; // hoisted here; full annotation state is declared below
+        let keyboardShortcutsBound = false;
+        let toolbarControlsBound = false;
         const THEME_LABELS = {
             default: 'Default',
             dark: 'Dark',
@@ -2191,6 +2193,10 @@ export class MermaidPreviewPanel {
         }, RENDER_TIMEOUT_MS);
 
         function bindKeyboardShortcuts() {
+            if (keyboardShortcutsBound) {
+                return;
+            }
+            keyboardShortcutsBound = true;
             document.addEventListener('keydown', (event) => {
                 // Ignore keyboard shortcuts when typing in input fields
                 if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
@@ -2333,6 +2339,10 @@ export class MermaidPreviewPanel {
         }
 
         function bindToolbarControls() {
+            if (toolbarControlsBound) {
+                return;
+            }
+            toolbarControlsBound = true;
             const actionMap = new Map([
                 ['zoom-in', zoomIn],
                 ['zoom-out', zoomOut],
@@ -2434,6 +2444,8 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
+        let annotationPointerHandlersBound = false;
+        let annotationResizeObserver = null;
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2442,13 +2454,25 @@ export class MermaidPreviewPanel {
 
             const wrapper = document.getElementById('viewport-wrapper');
             resizeAnnotationCanvas(wrapper);
-            new ResizeObserver(() => resizeAnnotationCanvas(wrapper)).observe(wrapper);
+            if (!annotationResizeObserver) {
+                annotationResizeObserver = new ResizeObserver(() => {
+                    const liveWrapper = document.getElementById('viewport-wrapper');
+                    if (liveWrapper) {
+                        resizeAnnotationCanvas(liveWrapper);
+                    }
+                });
+            }
+            annotationResizeObserver.disconnect();
+            annotationResizeObserver.observe(wrapper);
 
-            annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
-            annotationCanvas.addEventListener('pointermove', onAnnotationMove);
-            annotationCanvas.addEventListener('pointerup', onAnnotationUp);
-            annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
-            annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
+            if (!annotationPointerHandlersBound) {
+                annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
+                annotationCanvas.addEventListener('pointermove', onAnnotationMove);
+                annotationCanvas.addEventListener('pointerup', onAnnotationUp);
+                annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
+                annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
+                annotationPointerHandlersBound = true;
+            }
 
             // Populate shape icon on first render
             updateShapeIcon();
