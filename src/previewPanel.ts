@@ -1381,6 +1381,7 @@ export class MermaidPreviewPanel {
             const roundedPanX = Math.round(panX);
             const roundedPanY = Math.round(panY);
             stageEl.style.transform = 'translate(' + roundedPanX + 'px, ' + roundedPanY + 'px)';
+            annotationTransformRevision++;
             scheduleAnnotationRedraw();
         }
 
@@ -1390,6 +1391,7 @@ export class MermaidPreviewPanel {
                 el.style.transform = 'scale(' + currentZoom + ')';
             });
             document.getElementById('zoom-level').textContent = Math.round(currentZoom * 100) + '%';
+            annotationTransformRevision++;
             scheduleAnnotationRedraw();
         }
 
@@ -2440,6 +2442,7 @@ export class MermaidPreviewPanel {
         let staticAnnotationCtx = null;
         let staticRenderKey = '';
         const MAX_ANNOTATION_DPR = 1.5;
+        let annotationTransformRevision = 0;
 
         function getAnnotationDpr() {
             return Math.min(window.devicePixelRatio || 1, MAX_ANNOTATION_DPR);
@@ -2877,9 +2880,7 @@ export class MermaidPreviewPanel {
             const renderKey =
                 annotationCanvas.width + '|' +
                 annotationCanvas.height + '|' +
-                Math.round(currentZoom * 10000) + '|' +
-                Math.round(offsetX) + '|' +
-                Math.round(offsetY) + '|' +
+                annotationTransformRevision + '|' +
                 penStrokesRevision;
 
             // Persistent strokes are rendered onto an offscreen layer and reused
