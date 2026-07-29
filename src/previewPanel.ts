@@ -2782,7 +2782,7 @@ export class MermaidPreviewPanel {
                 ctx.lineTo(e.x, e.y);
                 ctx.stroke();
                 const angle = Math.atan2(e.y - s.y, e.x - s.x);
-                const headLen = Math.max(12 * dpr, Math.hypot(e.x - s.x, e.y - s.y) * 0.2);
+                const headLen = 14 * dpr;
                 ctx.beginPath();
                 ctx.moveTo(e.x, e.y);
                 ctx.lineTo(e.x - headLen * Math.cos(angle - Math.PI / 6), e.y - headLen * Math.sin(angle - Math.PI / 6));
