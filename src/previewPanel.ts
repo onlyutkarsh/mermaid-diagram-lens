@@ -2419,21 +2419,20 @@ export class MermaidPreviewPanel {
         }
 
         function getAnnotationPoint(event) {
-            const rect = annotationCanvas.getBoundingClientRect();
-            // Convert screen position to diagram-space so strokes follow zoom/pan
-            const cssX = event.clientX - rect.left;
-            const cssY = event.clientY - rect.top;
+            // Use the stage's actual screen rect so scroll, padding and CSS
+            // transforms are all accounted for — works correctly at any zoom level
+            const stageRect = stageEl.getBoundingClientRect();
             return {
-                x: (cssX - panX) / currentZoom,
-                y: (cssY - panY) / currentZoom
+                x: (event.clientX - stageRect.left) / currentZoom,
+                y: (event.clientY - stageRect.top) / currentZoom
             };
         }
 
-        function diagramToCanvas(pt) {
+        function diagramToCanvas(pt, offsetX, offsetY) {
             const dpr = window.devicePixelRatio || 1;
             return {
-                x: (pt.x * currentZoom + panX) * dpr,
-                y: (pt.y * currentZoom + panY) * dpr
+                x: offsetX + pt.x * currentZoom * dpr,
+                y: offsetY + pt.y * currentZoom * dpr
             };
         }
 
@@ -2677,15 +2676,25 @@ export class MermaidPreviewPanel {
         }
 
         function redrawAnnotations() {
-            if (!annotationCtx || !annotationCanvas) return;
+            if (!annotationCtx || !annotationCanvas || !stageEl) return;
             const ctx = annotationCtx;
             ctx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
-            // Persistent pen strokes — transform diagram-space → canvas-space
+            // Compute stage→canvas offset once per frame using live rects so that
+            // scroll, CSS padding, and all transforms are automatically included
+            const dpr = window.devicePixelRatio || 1;
+            const stageRect = stageEl.getBoundingClientRect();
+            const canvasRect = annotationCanvas.getBoundingClientRect();
+            const offsetX = (stageRect.left - canvasRect.left) * dpr;
+            const offsetY = (stageRect.top - canvasRect.top) * dpr;
+
+            const toCanvas = pt => diagramToCanvas(pt, offsetX, offsetY);
+
+            // Persistent pen strokes
             for (const stroke of penStrokes) {
-                drawSmooth(ctx, stroke.points.map(diagramToCanvas), stroke.color, stroke.lineWidth, 1.0);
+                drawSmooth(ctx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
             }
 
             // Laser strokes with fade-out
@@ -2694,13 +2703,13 @@ export class MermaidPreviewPanel {
                 const elapsed = now - stroke.startTime;
                 const alpha = Math.max(0, 1 - elapsed / LASER_DURATION_MS);
                 if (alpha > 0) {
-                    drawLaserGlow(ctx, stroke.points.map(diagramToCanvas), alpha);
+                    drawLaserGlow(ctx, stroke.points.map(toCanvas), alpha);
                 }
             }
 
             // Active stroke being drawn right now
             if (activeStroke && activeStroke.points.length > 0) {
-                const pts = activeStroke.points.map(diagramToCanvas);
+                const pts = activeStroke.points.map(toCanvas);
                 if (activeStroke.mode === 'laser') {
                     drawLaserGlow(ctx, pts, 1.0);
                 } else {
