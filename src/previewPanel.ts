@@ -2434,7 +2434,6 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
-        let mouseWindowTracking = false;
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2450,7 +2449,6 @@ export class MermaidPreviewPanel {
             annotationCanvas.addEventListener('pointerup', onAnnotationUp);
             annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
             annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
-            annotationCanvas.addEventListener('mousedown', onAnnotationMouseDown);
 
             // Populate shape icon on first render
             updateShapeIcon();
@@ -2465,16 +2463,12 @@ export class MermaidPreviewPanel {
         }
 
         function getAnnotationPoint(event) {
-            return getAnnotationPointFromClient(event.clientX, event.clientY);
-        }
-
-        function getAnnotationPointFromClient(clientX, clientY) {
             // Use the stage's actual screen rect so scroll, padding and CSS
             // transforms are all accounted for — works correctly at any zoom level
             const stageRect = stageEl.getBoundingClientRect();
             return {
-                x: (clientX - stageRect.left) / currentZoom,
-                y: (clientY - stageRect.top) / currentZoom
+                x: (event.clientX - stageRect.left) / currentZoom,
+                y: (event.clientY - stageRect.top) / currentZoom
             };
         }
 
@@ -2612,8 +2606,6 @@ export class MermaidPreviewPanel {
 
         function onAnnotationDown(event) {
             if (annotationMode === 'none') return;
-            // Mouse uses dedicated mousedown/mousemove/mouseup handlers.
-            if (event.pointerType === 'mouse') return;
             event.preventDefault();
             event.stopPropagation();
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
@@ -2639,78 +2631,19 @@ export class MermaidPreviewPanel {
                 };
             }
             annotationCanvas.setPointerCapture(event.pointerId);
-            requestAnnotationRedraw(true);
+            scheduleAnnotationRedraw();
         }
 
-        function onAnnotationMouseDown(event) {
-            if (annotationMode === 'none') return;
+        function onAnnotationMove(event) {
+            if (!isDrawingAnnotation || !activeStroke) return;
             event.preventDefault();
-            event.stopPropagation();
-            if (viewportEl) viewportEl.focus({ preventScroll: true });
-            isDrawingAnnotation = true;
-            const pt = getAnnotationPointFromClient(event.clientX, event.clientY);
-            if (annotationMode === 'shape') {
-                activeStroke = {
-                    mode: 'shape',
-                    shapeType: currentShape,
-                    start: pt,
-                    end: pt,
-                    color: PEN_COLORS[penColorIdx],
-                    lineWidth: 3
-                };
-            } else {
-                activeStroke = {
-                    points: [pt],
-                    color: annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx],
-                    lineWidth: annotationMode === 'laser' ? 4 : 3,
-                    mode: annotationMode,
-                    startTime: null
-                };
-            }
-            if (!mouseWindowTracking) {
-                window.addEventListener('mousemove', onWindowMouseMove, { passive: false });
-                window.addEventListener('mouseup', onWindowMouseUp, { passive: false });
-                mouseWindowTracking = true;
-            }
-            requestAnnotationRedraw(true);
-        }
-
-        function applyAnnotationMove(clientX, clientY) {
-            const pt = getAnnotationPointFromClient(clientX, clientY);
+            const pt = getAnnotationPoint(event);
             if (activeStroke.mode === 'shape') {
                 activeStroke.end = pt;
             } else {
                 activeStroke.points.push(pt);
             }
-        }
-
-        function onWindowMouseMove(event) {
-            if (!isDrawingAnnotation || !activeStroke) return;
-            if ((event.buttons & 1) === 0) {
-                onWindowMouseUp(event);
-                return;
-            }
-            event.preventDefault();
-            applyAnnotationMove(event.clientX, event.clientY);
-            requestAnnotationRedraw(false);
-        }
-
-        function onWindowMouseUp(event) {
-            if (!mouseWindowTracking) return;
-            window.removeEventListener('mousemove', onWindowMouseMove);
-            window.removeEventListener('mouseup', onWindowMouseUp);
-            mouseWindowTracking = false;
-            if (isDrawingAnnotation && activeStroke) {
-                onAnnotationUp(event);
-            }
-        }
-
-        function onAnnotationMove(event) {
-            if (!isDrawingAnnotation || !activeStroke) return;
-            if (mouseWindowTracking) return;
-            event.preventDefault();
-            applyAnnotationMove(event.clientX, event.clientY);
-            requestAnnotationRedraw(false);
+            scheduleAnnotationRedraw();
         }
 
         function onAnnotationUp(event) {
@@ -2730,30 +2663,13 @@ export class MermaidPreviewPanel {
                 }
             }
             activeStroke = null;
-            if (mouseWindowTracking) {
-                window.removeEventListener('mousemove', onWindowMouseMove);
-                window.removeEventListener('mouseup', onWindowMouseUp);
-                mouseWindowTracking = false;
-            }
-            requestAnnotationRedraw(false);
+            scheduleAnnotationRedraw();
         }
 
         function onAnnotationLeave(event) {
             if (isDrawingAnnotation) {
                 onAnnotationUp(event);
             }
-        }
-
-        function requestAnnotationRedraw(immediate) {
-            if (immediate) {
-                if (pendingAnnotationRedraw) {
-                    cancelAnimationFrame(pendingAnnotationRedraw);
-                    pendingAnnotationRedraw = null;
-                }
-                redrawAnnotations();
-                return;
-            }
-            scheduleAnnotationRedraw();
         }
 
         function scheduleAnnotationRedraw() {
@@ -3366,7 +3282,6 @@ export class MermaidPreviewPanel {
             width: 100%;
             height: 100%;
             pointer-events: none;
-            touch-action: none;
             z-index: 5;
             cursor: none;
         }
