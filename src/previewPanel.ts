@@ -15,6 +15,7 @@ type SerializedPanelState = {
 	documentUri: string;
 	mode: PreviewMode;
 	singleLine?: number;
+	runtimeVersion?: number;
 };
 
 type WebviewState = {
@@ -24,6 +25,7 @@ type WebviewState = {
 
 export class MermaidPreviewPanel {
 	public static readonly viewType = 'mermaidViewer';
+	private static readonly _webviewRuntimeVersion = 2;
 	private static readonly _panels = new Set<MermaidPreviewPanel>();
 	private static _suppressNextAppearanceRefresh = false;
 	private readonly _panel: vscode.WebviewPanel;
@@ -885,6 +887,7 @@ export class MermaidPreviewPanel {
 			documentUri: this._documentUri,
 			mode: this._mode,
 			singleLine: this._singleLine,
+			runtimeVersion: MermaidPreviewPanel._webviewRuntimeVersion,
 		};
 		// Update webview state for serialization
 		this._panel.webview.postMessage({
@@ -898,6 +901,7 @@ export class MermaidPreviewPanel {
 			documentUri: this._documentUri,
 			mode: this._mode,
 			singleLine: this._singleLine,
+			runtimeVersion: MermaidPreviewPanel._webviewRuntimeVersion,
 		};
 	}
 
@@ -1083,15 +1087,26 @@ export class MermaidPreviewPanel {
         const vscode = acquireVsCodeApi();
         const documentId = ${JSON.stringify(docId)};
         const persistedState = vscode.getState?.() ?? {};
+        const WEBVIEW_RUNTIME_VERSION = ${MermaidPreviewPanel._webviewRuntimeVersion};
         let docStates = persistedState.docStates ?? {};
-        const savedState = docStates[documentId] ?? {};
+        const persistedRuntimeVersion = typeof persistedState.panelState?.runtimeVersion === 'number'
+            ? persistedState.panelState.runtimeVersion
+            : 0;
+        const needsRuntimeReset = persistedRuntimeVersion !== WEBVIEW_RUNTIME_VERSION;
+        const savedState = needsRuntimeReset ? {} : (docStates[documentId] ?? {});
 
         // Initialize panel state for restoration after reload
-        let panelState = persistedState.panelState ?? {
+        let panelState = needsRuntimeReset || !persistedState.panelState ? {
             documentUri: ${JSON.stringify(this._documentUri)},
             mode: ${JSON.stringify(this._mode)},
-            singleLine: ${this._singleLine ?? 'undefined'}
-        };
+            singleLine: ${this._singleLine ?? 'undefined'},
+            runtimeVersion: WEBVIEW_RUNTIME_VERSION
+        } : persistedState.panelState;
+
+        if (needsRuntimeReset) {
+            docStates = {};
+            vscode.setState({ docStates, panelState });
+        }
 
         const diagrams = ${JSON.stringify(diagrams)};
         const renderTimeout = ${renderTimeout};
@@ -1228,6 +1243,11 @@ export class MermaidPreviewPanel {
         }
 
         async function updateDiagramsInPlace(newDiagrams) {
+            // Clear annotations when diagrams are updated
+            if (annotationCanvas) {
+                eraseAllAnnotations();
+            }
+
             if (newDiagrams.length !== diagrams.length) {
                 diagrams.length = 0;
                 diagrams.push(...newDiagrams);
@@ -1276,6 +1296,11 @@ export class MermaidPreviewPanel {
         }
 
         async function renderAllDiagrams() {
+            // Clear annotations when diagrams are re-rendered
+            if (annotationCanvas) {
+                eraseAllAnnotations();
+            }
+
             const container = document.getElementById('diagrams-container');
             container.innerHTML = '';
 
@@ -2430,6 +2455,7 @@ export class MermaidPreviewPanel {
 
         let annotationCanvas = null;
         let annotationCtx = null;
+        let annotationResizeObserver = null;
         let isDrawingAnnotation = false;
         let activeStroke = null;    // stroke being drawn right now
         let penStrokes = [];        // completed, persistent pen strokes
@@ -2443,6 +2469,7 @@ export class MermaidPreviewPanel {
         let staticAnnotationCtx = null;
         let staticRenderKey = '';
         let mouseDrawingActive = false;
+        let runtimeCleanupDone = false;
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2451,7 +2478,8 @@ export class MermaidPreviewPanel {
 
             const wrapper = document.getElementById('viewport-wrapper');
             resizeAnnotationCanvas(wrapper);
-            new ResizeObserver(() => resizeAnnotationCanvas(wrapper)).observe(wrapper);
+            annotationResizeObserver = new ResizeObserver(() => resizeAnnotationCanvas(wrapper));
+            annotationResizeObserver.observe(wrapper);
 
             annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
             annotationCanvas.addEventListener('pointermove', onAnnotationMove);
@@ -2462,6 +2490,38 @@ export class MermaidPreviewPanel {
 
             // Populate shape icon on first render
             updateShapeIcon();
+        }
+
+        function cleanupAnnotationRuntime() {
+            if (runtimeCleanupDone) {
+                return;
+            }
+            runtimeCleanupDone = true;
+
+            if (pendingAnnotationRedraw) {
+                cancelAnimationFrame(pendingAnnotationRedraw);
+                pendingAnnotationRedraw = null;
+            }
+            if (laserAnimRafId) {
+                cancelAnimationFrame(laserAnimRafId);
+                laserAnimRafId = null;
+            }
+            if (annotationResizeObserver) {
+                annotationResizeObserver.disconnect();
+                annotationResizeObserver = null;
+            }
+            if (mouseDrawingActive) {
+                window.removeEventListener('mousemove', onWindowMouseMove);
+                window.removeEventListener('mouseup', onWindowMouseUp);
+                mouseDrawingActive = false;
+            }
+            if (annotationCanvas) {
+                try {
+                    annotationCanvas.releasePointerCapture?.(activePointerId);
+                } catch {
+                    // ignore
+                }
+            }
         }
 
         function resizeAnnotationCanvas(wrapper) {
@@ -3003,6 +3063,8 @@ export class MermaidPreviewPanel {
             }
             laserAnimRafId = requestAnimationFrame(animate);
         }
+
+        window.addEventListener('beforeunload', cleanupAnnotationRuntime);
     </script>
     <style>
         * { box-sizing: border-box; }
