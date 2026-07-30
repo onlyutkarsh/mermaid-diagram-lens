@@ -2450,6 +2450,7 @@ export class MermaidPreviewPanel {
             annotationCanvas.addEventListener('pointerup', onAnnotationUp);
             annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
             annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
+            annotationCanvas.addEventListener('mousedown', onAnnotationMouseDown);
 
             // Populate shape icon on first render
             updateShapeIcon();
@@ -2611,6 +2612,8 @@ export class MermaidPreviewPanel {
 
         function onAnnotationDown(event) {
             if (annotationMode === 'none') return;
+            // Mouse uses dedicated mousedown/mousemove/mouseup handlers.
+            if (event.pointerType === 'mouse') return;
             event.preventDefault();
             event.stopPropagation();
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
@@ -2635,14 +2638,39 @@ export class MermaidPreviewPanel {
                     startTime: null
                 };
             }
-            if (event.pointerType === 'mouse') {
-                if (!mouseWindowTracking) {
-                    window.addEventListener('mousemove', onWindowMouseMove, { passive: false });
-                    window.addEventListener('mouseup', onWindowMouseUp, { passive: false });
-                    mouseWindowTracking = true;
-                }
+            annotationCanvas.setPointerCapture(event.pointerId);
+            requestAnnotationRedraw(true);
+        }
+
+        function onAnnotationMouseDown(event) {
+            if (annotationMode === 'none') return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (viewportEl) viewportEl.focus({ preventScroll: true });
+            isDrawingAnnotation = true;
+            const pt = getAnnotationPointFromClient(event.clientX, event.clientY);
+            if (annotationMode === 'shape') {
+                activeStroke = {
+                    mode: 'shape',
+                    shapeType: currentShape,
+                    start: pt,
+                    end: pt,
+                    color: PEN_COLORS[penColorIdx],
+                    lineWidth: 3
+                };
             } else {
-                annotationCanvas.setPointerCapture(event.pointerId);
+                activeStroke = {
+                    points: [pt],
+                    color: annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx],
+                    lineWidth: annotationMode === 'laser' ? 4 : 3,
+                    mode: annotationMode,
+                    startTime: null
+                };
+            }
+            if (!mouseWindowTracking) {
+                window.addEventListener('mousemove', onWindowMouseMove, { passive: false });
+                window.addEventListener('mouseup', onWindowMouseUp, { passive: false });
+                mouseWindowTracking = true;
             }
             requestAnnotationRedraw(true);
         }
@@ -2658,6 +2686,10 @@ export class MermaidPreviewPanel {
 
         function onWindowMouseMove(event) {
             if (!isDrawingAnnotation || !activeStroke) return;
+            if ((event.buttons & 1) === 0) {
+                onWindowMouseUp(event);
+                return;
+            }
             event.preventDefault();
             applyAnnotationMove(event.clientX, event.clientY);
             requestAnnotationRedraw(false);
