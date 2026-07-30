@@ -2434,6 +2434,7 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
+        let mouseWindowTracking = false;
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2463,12 +2464,16 @@ export class MermaidPreviewPanel {
         }
 
         function getAnnotationPoint(event) {
+            return getAnnotationPointFromClient(event.clientX, event.clientY);
+        }
+
+        function getAnnotationPointFromClient(clientX, clientY) {
             // Use the stage's actual screen rect so scroll, padding and CSS
             // transforms are all accounted for — works correctly at any zoom level
             const stageRect = stageEl.getBoundingClientRect();
             return {
-                x: (event.clientX - stageRect.left) / currentZoom,
-                y: (event.clientY - stageRect.top) / currentZoom
+                x: (clientX - stageRect.left) / currentZoom,
+                y: (clientY - stageRect.top) / currentZoom
             };
         }
 
@@ -2630,19 +2635,49 @@ export class MermaidPreviewPanel {
                     startTime: null
                 };
             }
-            annotationCanvas.setPointerCapture(event.pointerId);
+            if (event.pointerType === 'mouse') {
+                if (!mouseWindowTracking) {
+                    window.addEventListener('mousemove', onWindowMouseMove, { passive: false });
+                    window.addEventListener('mouseup', onWindowMouseUp, { passive: false });
+                    mouseWindowTracking = true;
+                }
+            } else {
+                annotationCanvas.setPointerCapture(event.pointerId);
+            }
             requestAnnotationRedraw(true);
         }
 
-        function onAnnotationMove(event) {
-            if (!isDrawingAnnotation || !activeStroke) return;
-            event.preventDefault();
-            const pt = getAnnotationPoint(event);
+        function applyAnnotationMove(clientX, clientY) {
+            const pt = getAnnotationPointFromClient(clientX, clientY);
             if (activeStroke.mode === 'shape') {
                 activeStroke.end = pt;
             } else {
                 activeStroke.points.push(pt);
             }
+        }
+
+        function onWindowMouseMove(event) {
+            if (!isDrawingAnnotation || !activeStroke) return;
+            event.preventDefault();
+            applyAnnotationMove(event.clientX, event.clientY);
+            requestAnnotationRedraw(false);
+        }
+
+        function onWindowMouseUp(event) {
+            if (!mouseWindowTracking) return;
+            window.removeEventListener('mousemove', onWindowMouseMove);
+            window.removeEventListener('mouseup', onWindowMouseUp);
+            mouseWindowTracking = false;
+            if (isDrawingAnnotation && activeStroke) {
+                onAnnotationUp(event);
+            }
+        }
+
+        function onAnnotationMove(event) {
+            if (!isDrawingAnnotation || !activeStroke) return;
+            if (mouseWindowTracking) return;
+            event.preventDefault();
+            applyAnnotationMove(event.clientX, event.clientY);
             requestAnnotationRedraw(false);
         }
 
@@ -2663,6 +2698,11 @@ export class MermaidPreviewPanel {
                 }
             }
             activeStroke = null;
+            if (mouseWindowTracking) {
+                window.removeEventListener('mousemove', onWindowMouseMove);
+                window.removeEventListener('mouseup', onWindowMouseUp);
+                mouseWindowTracking = false;
+            }
             requestAnnotationRedraw(false);
         }
 
