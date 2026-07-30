@@ -15,6 +15,7 @@ type SerializedPanelState = {
 	documentUri: string;
 	mode: PreviewMode;
 	singleLine?: number;
+	runtimeVersion?: number;
 };
 
 type WebviewState = {
@@ -24,6 +25,7 @@ type WebviewState = {
 
 export class MermaidPreviewPanel {
 	public static readonly viewType = 'mermaidViewer';
+	private static readonly _webviewRuntimeVersion = 2;
 	private static readonly _panels = new Set<MermaidPreviewPanel>();
 	private static _suppressNextAppearanceRefresh = false;
 	private readonly _panel: vscode.WebviewPanel;
@@ -642,10 +644,18 @@ export class MermaidPreviewPanel {
 			'Zoom:',
 			'  +  or  =     Zoom in',
 			'  -            Zoom out',
-			'  r            Reset view',
+			'  0            Reset view',
 			'',
 			'Pan:',
 			'  ↑ ↓ ← →      Arrow keys to pan around',
+			'',
+			'Annotation:',
+			'  p            Pen tool',
+			'  s            Shape tool (cycles arrow → line → rect → ellipse)',
+			'  l            Laser pointer (fades automatically)',
+			'  e            Erase all annotations',
+			'  r / g / b    Set color red / green / blue (pen & shape only)',
+			'  Esc          Exit annotation mode',
 			'',
 		].join('\n');
 
@@ -877,6 +887,7 @@ export class MermaidPreviewPanel {
 			documentUri: this._documentUri,
 			mode: this._mode,
 			singleLine: this._singleLine,
+			runtimeVersion: MermaidPreviewPanel._webviewRuntimeVersion,
 		};
 		// Update webview state for serialization
 		this._panel.webview.postMessage({
@@ -890,6 +901,7 @@ export class MermaidPreviewPanel {
 			documentUri: this._documentUri,
 			mode: this._mode,
 			singleLine: this._singleLine,
+			runtimeVersion: MermaidPreviewPanel._webviewRuntimeVersion,
 		};
 	}
 
@@ -1075,15 +1087,26 @@ export class MermaidPreviewPanel {
         const vscode = acquireVsCodeApi();
         const documentId = ${JSON.stringify(docId)};
         const persistedState = vscode.getState?.() ?? {};
+        const WEBVIEW_RUNTIME_VERSION = ${MermaidPreviewPanel._webviewRuntimeVersion};
         let docStates = persistedState.docStates ?? {};
-        const savedState = docStates[documentId] ?? {};
+        const persistedRuntimeVersion = typeof persistedState.panelState?.runtimeVersion === 'number'
+            ? persistedState.panelState.runtimeVersion
+            : 0;
+        const needsRuntimeReset = persistedRuntimeVersion !== WEBVIEW_RUNTIME_VERSION;
+        const savedState = needsRuntimeReset ? {} : (docStates[documentId] ?? {});
 
         // Initialize panel state for restoration after reload
-        let panelState = persistedState.panelState ?? {
+        let panelState = needsRuntimeReset || !persistedState.panelState ? {
             documentUri: ${JSON.stringify(this._documentUri)},
             mode: ${JSON.stringify(this._mode)},
-            singleLine: ${this._singleLine ?? 'undefined'}
-        };
+            singleLine: ${this._singleLine ?? 'undefined'},
+            runtimeVersion: WEBVIEW_RUNTIME_VERSION
+        } : persistedState.panelState;
+
+        if (needsRuntimeReset) {
+            docStates = {};
+            vscode.setState({ docStates, panelState });
+        }
 
         const diagrams = ${JSON.stringify(diagrams)};
         const renderTimeout = ${renderTimeout};
@@ -1104,6 +1127,7 @@ export class MermaidPreviewPanel {
         let pendingTransform = null;
         let pendingZoomUpdate = null;
         let lastParseError = null;
+        let annotationMode = 'none'; // hoisted here; full annotation state is declared below
         const THEME_LABELS = {
             default: 'Default',
             dark: 'Dark',
@@ -1220,6 +1244,10 @@ export class MermaidPreviewPanel {
 
         async function updateDiagramsInPlace(newDiagrams) {
             if (newDiagrams.length !== diagrams.length) {
+                // Diagram count changed, clear annotations
+                if (annotationCanvas) {
+                    eraseAllAnnotations();
+                }
                 diagrams.length = 0;
                 diagrams.push(...newDiagrams);
                 await renderAllDiagrams();
@@ -1232,6 +1260,11 @@ export class MermaidPreviewPanel {
                     changed.push(i);
                     diagrams[i] = newDiagrams[i];
                 }
+            }
+
+            // Only clear annotations if diagrams actually changed
+            if (changed.length > 0 && annotationCanvas) {
+                eraseAllAnnotations();
             }
 
             for (const i of changed) {
@@ -1283,6 +1316,11 @@ export class MermaidPreviewPanel {
                     message: 'No diagrams found in document'
                 });
                 return;
+            }
+
+            // Clear annotations when doing a full re-render
+            if (annotationCanvas) {
+                eraseAllAnnotations();
             }
 
             // Create all shells upfront so loading spinners appear immediately
@@ -1372,6 +1410,8 @@ export class MermaidPreviewPanel {
             const roundedPanX = Math.round(panX);
             const roundedPanY = Math.round(panY);
             stageEl.style.transform = 'translate(' + roundedPanX + 'px, ' + roundedPanY + 'px)';
+            annotationTransformRevision++;
+            scheduleAnnotationRedraw();
         }
 
         function applyZoomScale() {
@@ -1380,6 +1420,8 @@ export class MermaidPreviewPanel {
                 el.style.transform = 'scale(' + currentZoom + ')';
             });
             document.getElementById('zoom-level').textContent = Math.round(currentZoom * 100) + '%';
+            annotationTransformRevision++;
+            scheduleAnnotationRedraw();
         }
 
         window.zoomIn = function() {
@@ -1404,6 +1446,9 @@ export class MermaidPreviewPanel {
         };
 
         function startPan(event) {
+            if (annotationMode !== 'none') {
+                return;
+            }
             if (event.target.closest('.dropdown') || event.target.closest('.toolbar') || event.target.closest('.diagram-error')) {
                 return;
             }
@@ -1411,6 +1456,9 @@ export class MermaidPreviewPanel {
             if (event.button !== undefined && event.button !== 0 && event.pointerType !== 'touch' && event.pointerType !== 'pen') {
                 return;
             }
+
+            // Ensure the viewport has DOM focus so keyboard shortcuts work
+            if (viewportEl) viewportEl.focus({ preventScroll: true });
 
             isPanning = true;
             lastPanX = event.clientX;
@@ -2134,6 +2182,11 @@ export class MermaidPreviewPanel {
                 scheduleTransform();
                 bindToolbarControls();
                 bindKeyboardShortcuts();
+                initAnnotationCanvas();
+                // Give the viewport DOM focus immediately so keyboard shortcuts
+                // work without requiring the user to click first
+                const vp = document.getElementById('diagram-viewport');
+                if (vp) vp.focus({ preventScroll: true });
                 // Save state immediately on load to ensure it persists for restoration
                 saveInteractionState();
                 vscode.postMessage({ command: 'lifecycleEvent', status: 'webviewLoaded', documentId });
@@ -2211,10 +2264,65 @@ export class MermaidPreviewPanel {
                         zoomOut();
                         break;
 
-                    // Reset view with r
-                    case 'r':
+                    // Reset view with 0
+                    case '0':
                         event.preventDefault();
                         zoomReset();
+                        break;
+
+                    // Annotation: pen tool
+                    case 'p':
+                        event.preventDefault();
+                        activatePen();
+                        break;
+
+                    // Annotation: set color (pen & shape only)
+                    case 'r':
+                        event.preventDefault();
+                        if (annotationMode === 'pen' || annotationMode === 'shape') {
+                            penColorIdx = 0; // red
+                            updateAnnotationUI();
+                        }
+                        break;
+
+                    case 'g':
+                        event.preventDefault();
+                        if (annotationMode === 'pen' || annotationMode === 'shape') {
+                            penColorIdx = 2; // green
+                            updateAnnotationUI();
+                        }
+                        break;
+
+                    case 'b':
+                        event.preventDefault();
+                        if (annotationMode === 'pen' || annotationMode === 'shape') {
+                            penColorIdx = 1; // blue
+                            updateAnnotationUI();
+                        }
+                        break;
+
+                    // Annotation: laser pointer
+                    case 'l':
+                        event.preventDefault();
+                        toggleLaser();
+                        break;
+
+                    // Annotation: erase all
+                    case 'e':
+                        event.preventDefault();
+                        eraseAllAnnotations();
+                        break;
+
+                    // Annotation: shapes (cycles arrow→line→rect→ellipse)
+                    case 's':
+                        event.preventDefault();
+                        toggleShapeMode();
+                        break;
+
+                    // Exit annotation mode (back to grab/pan)
+                    case 'escape':
+                        event.preventDefault();
+                        setAnnotationMode('none');
                         break;
 
                     // Pan with arrow keys (smooth movement)
@@ -2315,7 +2423,652 @@ export class MermaidPreviewPanel {
                     btn.addEventListener('click', () => copyActiveDiagram(format, scale));
                 }
             });
+
+            const penBtn = document.getElementById('pen-btn');
+            if (penBtn) {
+                penBtn.addEventListener('click', activatePen);
+            }
+
+            const shapeBtn = document.getElementById('shape-btn');
+            if (shapeBtn) {
+                shapeBtn.addEventListener('click', toggleShapeMode);
+            }
+
+            const laserBtn = document.getElementById('laser-btn');
+            if (laserBtn) {
+                laserBtn.addEventListener('click', toggleLaser);
+            }
+
+            const eraseAnnotationBtn = document.getElementById('erase-annotation-btn');
+            if (eraseAnnotationBtn) {
+                eraseAnnotationBtn.addEventListener('click', eraseAllAnnotations);
+            }
         }
+
+        // ============================================================
+        // ANNOTATION SYSTEM
+        // ============================================================
+        // annotationMode is declared above with other state vars
+        let penColorIdx = 0;
+        const PEN_COLORS = ['#ef4444', '#3b82f6', '#22c55e']; // red, blue, green
+        const LASER_COLOR = '#ff3333';
+        const LASER_DURATION_MS = 2000;
+        const SHAPES = ['arrow', 'line', 'rect', 'ellipse'];
+        let shapeIdx = 0;
+        let currentShape = SHAPES[0];
+
+        let annotationCanvas = null;
+        let annotationCtx = null;
+        let annotationResizeObserver = null;
+        let isDrawingAnnotation = false;
+        let activeStroke = null;    // stroke being drawn right now
+        let penStrokes = [];        // completed, persistent pen strokes
+        let laserStrokes = [];      // laser strokes pending fade-out
+        let laserAnimRafId = null;
+        let pendingAnnotationRedraw = null;
+        let activeDrawStageRect = null;
+        let annotationTransformRevision = 0;
+        let penStrokesRevision = 0;
+        let staticAnnotationCanvas = null;
+        let staticAnnotationCtx = null;
+        let staticRenderKey = '';
+        let mouseDrawingActive = false;
+        let runtimeCleanupDone = false;
+
+        function initAnnotationCanvas() {
+            annotationCanvas = document.getElementById('annotation-canvas');
+            if (!annotationCanvas) return;
+            annotationCtx = annotationCanvas.getContext('2d');
+
+            const wrapper = document.getElementById('viewport-wrapper');
+            resizeAnnotationCanvas(wrapper);
+            annotationResizeObserver = new ResizeObserver(() => resizeAnnotationCanvas(wrapper));
+            annotationResizeObserver.observe(wrapper);
+
+            annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
+            annotationCanvas.addEventListener('pointermove', onAnnotationMove);
+            annotationCanvas.addEventListener('pointerup', onAnnotationUp);
+            annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
+            annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
+            annotationCanvas.addEventListener('mousedown', onAnnotationMouseDown);
+
+            // Populate shape icon on first render
+            updateShapeIcon();
+        }
+
+        function cleanupAnnotationRuntime() {
+            if (runtimeCleanupDone) {
+                return;
+            }
+            runtimeCleanupDone = true;
+
+            if (pendingAnnotationRedraw) {
+                cancelAnimationFrame(pendingAnnotationRedraw);
+                pendingAnnotationRedraw = null;
+            }
+            if (laserAnimRafId) {
+                cancelAnimationFrame(laserAnimRafId);
+                laserAnimRafId = null;
+            }
+            if (annotationResizeObserver) {
+                annotationResizeObserver.disconnect();
+                annotationResizeObserver = null;
+            }
+            if (mouseDrawingActive) {
+                window.removeEventListener('mousemove', onWindowMouseMove);
+                window.removeEventListener('mouseup', onWindowMouseUp);
+                mouseDrawingActive = false;
+            }
+            if (annotationCanvas) {
+                try {
+                    annotationCanvas.releasePointerCapture?.(activePointerId);
+                } catch {
+                    // ignore
+                }
+            }
+        }
+
+        function resizeAnnotationCanvas(wrapper) {
+            if (!annotationCanvas) return;
+            const dpr = window.devicePixelRatio || 1;
+            annotationCanvas.width = wrapper.clientWidth * dpr;
+            annotationCanvas.height = wrapper.clientHeight * dpr;
+            staticRenderKey = '';
+            scheduleAnnotationRedraw();
+        }
+
+        function getAnnotationPoint(event) {
+            // Use the stage's actual screen rect so scroll, padding and CSS
+            // transforms are all accounted for — works correctly at any zoom level
+            const stageRect = activeDrawStageRect || stageEl.getBoundingClientRect();
+            return {
+                x: (event.clientX - stageRect.left) / currentZoom,
+                y: (event.clientY - stageRect.top) / currentZoom
+            };
+        }
+
+        function diagramToCanvas(pt, offsetX, offsetY) {
+            const dpr = window.devicePixelRatio || 1;
+            return {
+                x: offsetX + pt.x * currentZoom * dpr,
+                y: offsetY + pt.y * currentZoom * dpr
+            };
+        }
+
+        function setAnnotationMode(mode) {
+            annotationMode = mode;
+            if (!annotationCanvas) {
+                annotationCanvas = document.getElementById('annotation-canvas');
+            }
+            if (mode === 'none') {
+                if (annotationCanvas) {
+                    annotationCanvas.style.pointerEvents = 'none';
+                    annotationCanvas.style.cursor = '';
+                }
+                document.body.classList.remove('is-annotating');
+            } else {
+                if (annotationCanvas) {
+                    annotationCanvas.style.pointerEvents = 'all';
+                }
+                document.body.classList.add('is-annotating');
+            }
+            updateAnnotationUI();
+        }
+
+        function makeDotCursor(color) {
+            const r = 6;
+            const size = r * 2 + 2;
+            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '">' +
+                '<circle cx="' + (r + 1) + '" cy="' + (r + 1) + '" r="' + r + '" fill="' + color + '" stroke="rgba(0,0,0,0.6)" stroke-width="1.5"/>' +
+                '</svg>';
+            return 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") ' + (r + 1) + ' ' + (r + 1) + ', crosshair';
+        }
+
+        function makeLaserCursor() {
+            // Larger canvas to fit the glow halo
+            const cx = 14, cy = 14, size = 28;
+            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '">' +
+                '<defs>' +
+                  '<radialGradient id="g" cx="50%" cy="50%" r="50%">' +
+                    '<stop offset="0%"   stop-color="#ff6600" stop-opacity="0.6"/>' +
+                    '<stop offset="60%"  stop-color="#ff3333" stop-opacity="0.25"/>' +
+                    '<stop offset="100%" stop-color="#ff0000" stop-opacity="0"/>' +
+                  '</radialGradient>' +
+                '</defs>' +
+                '<circle cx="' + cx + '" cy="' + cy + '" r="13" fill="url(#g)"/>' +
+                '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="#ff3333" stroke="#ffffff" stroke-width="1.2" opacity="0.9"/>' +
+                '<circle cx="' + cx + '" cy="' + cy + '" r="2" fill="#ffffff" opacity="0.95"/>' +
+                '</svg>';
+            return 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '") ' + cx + ' ' + cy + ', crosshair';
+        }
+
+        function applyDotCursor() {
+            if (annotationMode === 'none' || !annotationCanvas) return;
+            if (annotationMode === 'laser') {
+                annotationCanvas.style.cursor = makeLaserCursor();
+            } else {
+                annotationCanvas.style.cursor = makeDotCursor(PEN_COLORS[penColorIdx]);
+            }
+        }
+
+        function activatePen() {
+            if (annotationMode !== 'pen') {
+                setAnnotationMode('pen');
+            }
+            applyDotCursor();
+            updateAnnotationUI();
+        }
+
+        function toggleLaser() {
+            if (annotationMode === 'laser') {
+                setAnnotationMode('none');
+            } else {
+                setAnnotationMode('laser');
+            }
+        }
+
+        function toggleShapeMode() {
+            if (annotationMode === 'shape') {
+                shapeIdx = (shapeIdx + 1) % SHAPES.length;
+                currentShape = SHAPES[shapeIdx];
+            } else {
+                setAnnotationMode('shape');
+            }
+            updateAnnotationUI();
+        }
+
+        function eraseAllAnnotations() {
+            penStrokes = [];
+            penStrokesRevision++;
+            staticRenderKey = '';
+            laserStrokes = [];
+            activeStroke = null;
+            activeDrawStageRect = null;
+            if (annotationCtx) {
+                annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+            }
+        }
+
+        function updateAnnotationUI() {
+            const penDot = document.getElementById('pen-dot');
+            if (penDot) {
+                penDot.style.backgroundColor = PEN_COLORS[penColorIdx];
+            }
+            const penBtn = document.getElementById('pen-btn');
+            if (penBtn) {
+                penBtn.classList.toggle('annotation-active', annotationMode === 'pen');
+            }
+            const laserBtn = document.getElementById('laser-btn');
+            if (laserBtn) {
+                laserBtn.classList.toggle('annotation-active', annotationMode === 'laser');
+            }
+            const shapeBtn = document.getElementById('shape-btn');
+            if (shapeBtn) {
+                shapeBtn.classList.toggle('annotation-active', annotationMode === 'shape');
+            }
+            updateShapeIcon();
+            applyDotCursor();
+        }
+
+        const SHAPE_ICONS = {
+            arrow: '<span style="font-size:14px;line-height:1;" aria-hidden="true">↗</span>',
+            line:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+            rect:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="12" height="9" stroke="currentColor" stroke-width="1.8" rx="0.5" fill="none"/></svg>',
+            ellipse: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="8" cy="8" rx="6" ry="4.5" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>'
+        };
+
+        function updateShapeIcon() {
+            const el = document.getElementById('shape-icon');
+            if (el) el.innerHTML = SHAPE_ICONS[currentShape] || SHAPE_ICONS.arrow;
+        }
+
+        function onAnnotationDown(event) {
+            if (annotationMode === 'none') return;
+            if (event.pointerType === 'mouse') return;
+            event.preventDefault();
+            event.stopPropagation();
+            // Ensure DOM focus so keyboard shortcuts keep working while annotating
+            if (viewportEl) viewportEl.focus({ preventScroll: true });
+            isDrawingAnnotation = true;
+            activeDrawStageRect = stageEl ? stageEl.getBoundingClientRect() : null;
+            const pt = getAnnotationPoint(event);
+            if (annotationMode === 'shape') {
+                activeStroke = {
+                    mode: 'shape',
+                    shapeType: currentShape,
+                    start: pt,
+                    end: pt,
+                    color: PEN_COLORS[penColorIdx],
+                    lineWidth: 3
+                };
+            } else {
+                activeStroke = {
+                    points: [pt],
+                    color: annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx],
+                    lineWidth: annotationMode === 'laser' ? 4 : 3,
+                    mode: annotationMode,
+                    startTime: null
+                };
+            }
+            annotationCanvas.setPointerCapture(event.pointerId);
+            redrawAnnotations();
+        }
+
+        function onAnnotationMouseDown(event) {
+            if (annotationMode === 'none') return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (viewportEl) viewportEl.focus({ preventScroll: true });
+            isDrawingAnnotation = true;
+            mouseDrawingActive = true;
+            activeDrawStageRect = stageEl ? stageEl.getBoundingClientRect() : null;
+            const pt = getAnnotationPoint(event);
+            if (annotationMode === 'shape') {
+                activeStroke = {
+                    mode: 'shape',
+                    shapeType: currentShape,
+                    start: pt,
+                    end: pt,
+                    color: PEN_COLORS[penColorIdx],
+                    lineWidth: 3
+                };
+            } else {
+                activeStroke = {
+                    points: [pt],
+                    color: annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx],
+                    lineWidth: annotationMode === 'laser' ? 4 : 3,
+                    mode: annotationMode,
+                    startTime: null
+                };
+            }
+            window.addEventListener('mousemove', onWindowMouseMove, { passive: false });
+            window.addEventListener('mouseup', onWindowMouseUp, { passive: false });
+            redrawAnnotations();
+        }
+
+        function onWindowMouseMove(event) {
+            if (!mouseDrawingActive || !isDrawingAnnotation || !activeStroke) return;
+            if ((event.buttons & 1) === 0) {
+                onWindowMouseUp(event);
+                return;
+            }
+            event.preventDefault();
+            const pt = getAnnotationPoint(event);
+            if (activeStroke.mode === 'shape') {
+                activeStroke.end = pt;
+            } else {
+                activeStroke.points.push(pt);
+            }
+            scheduleAnnotationRedraw();
+        }
+
+        function onWindowMouseUp(event) {
+            if (!mouseDrawingActive) return;
+            window.removeEventListener('mousemove', onWindowMouseMove);
+            window.removeEventListener('mouseup', onWindowMouseUp);
+            mouseDrawingActive = false;
+            if (isDrawingAnnotation && activeStroke) {
+                onAnnotationUp(event);
+            }
+        }
+
+        function onAnnotationMove(event) {
+            if (!isDrawingAnnotation || !activeStroke) return;
+            if (mouseDrawingActive) return;
+            event.preventDefault();
+            const pt = getAnnotationPoint(event);
+            if (activeStroke.mode === 'shape') {
+                activeStroke.end = pt;
+            } else {
+                activeStroke.points.push(pt);
+            }
+            scheduleAnnotationRedraw();
+        }
+
+        function onAnnotationUp(event) {
+            if (!isDrawingAnnotation || !activeStroke) return;
+            isDrawingAnnotation = false;
+            if (activeStroke.mode === 'shape') {
+                penStrokes.push(activeStroke);
+                penStrokesRevision++;
+                staticRenderKey = '';
+            } else if (activeStroke.mode === 'pen') {
+                if (activeStroke.points.length > 0) {
+                    penStrokes.push(activeStroke);
+                    penStrokesRevision++;
+                    staticRenderKey = '';
+                }
+            } else if (activeStroke.mode === 'laser') {
+                activeStroke.startTime = Date.now();
+                if (activeStroke.points.length > 0) {
+                    laserStrokes.push(activeStroke);
+                    startLaserFade();
+                }
+            }
+            activeStroke = null;
+            activeDrawStageRect = null;
+            if (mouseDrawingActive) {
+                window.removeEventListener('mousemove', onWindowMouseMove);
+                window.removeEventListener('mouseup', onWindowMouseUp);
+                mouseDrawingActive = false;
+            }
+            scheduleAnnotationRedraw();
+        }
+
+        function onAnnotationLeave(event) {
+            if (isDrawingAnnotation) {
+                onAnnotationUp(event);
+            } else {
+                activeDrawStageRect = null;
+            }
+        }
+
+        function scheduleAnnotationRedraw() {
+            if (pendingAnnotationRedraw) return;
+            pendingAnnotationRedraw = requestAnimationFrame(() => {
+                pendingAnnotationRedraw = null;
+                redrawAnnotations();
+            });
+        }
+
+        function drawSmooth(ctx, points, color, logicalLineWidth, alpha) {
+            if (points.length === 0) return;
+            const dpr = window.devicePixelRatio || 1;
+            const lw = logicalLineWidth * dpr;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = lw;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            if (points.length === 1) {
+                // Single point: draw a filled circle
+                ctx.beginPath();
+                ctx.arc(points[0].x, points[0].y, lw / 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                return;
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+
+            for (let i = 1; i < points.length - 1; i++) {
+                const mx = (points[i].x + points[i + 1].x) * 0.5;
+                const my = (points[i].y + points[i + 1].y) * 0.5;
+                ctx.quadraticCurveTo(points[i].x, points[i].y, mx, my);
+            }
+
+            // Final segment directly to last point
+            const last = points[points.length - 1];
+            ctx.lineTo(last.x, last.y);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawLaserGlow(ctx, points, alpha) {
+            if (points.length === 0) return;
+            const dpr = window.devicePixelRatio || 1;
+
+            // Pass 1 — wide soft halo
+            ctx.save();
+            ctx.globalAlpha = alpha * 0.25;
+            ctx.strokeStyle = '#ff6600';
+            ctx.lineWidth = 18 * dpr;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.filter = 'blur(' + (4 * dpr) + 'px)';
+            drawPathOnly(ctx, points);
+            ctx.restore();
+
+            // Pass 2 — mid glow
+            ctx.save();
+            ctx.globalAlpha = alpha * 0.5;
+            ctx.strokeStyle = LASER_COLOR;
+            ctx.lineWidth = 8 * dpr;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.filter = 'blur(' + (1.5 * dpr) + 'px)';
+            drawPathOnly(ctx, points);
+            ctx.restore();
+
+            // Pass 3 — bright core + white spine
+            drawSmooth(ctx, points, LASER_COLOR, 3.5, alpha);
+            drawSmooth(ctx, points, '#ffffff', 1.2, alpha * 0.8);
+        }
+
+        function drawPathOnly(ctx, points) {
+            if (points.length < 2) return;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length - 1; i++) {
+                const mx = (points[i].x + points[i + 1].x) * 0.5;
+                const my = (points[i].y + points[i + 1].y) * 0.5;
+                ctx.quadraticCurveTo(points[i].x, points[i].y, mx, my);
+            }
+            ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+            ctx.stroke();
+        }
+
+        function drawShapeOnCanvas(ctx, type, s, e, color, logicalLineWidth) {
+            const dpr = window.devicePixelRatio || 1;
+            const lw = logicalLineWidth * dpr;
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lw;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            if (type === 'line') {
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(e.x, e.y);
+                ctx.stroke();
+            } else if (type === 'arrow') {
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(e.x, e.y);
+                ctx.stroke();
+                const angle = Math.atan2(e.y - s.y, e.x - s.x);
+                const headLen = 14 * dpr;
+                ctx.beginPath();
+                ctx.moveTo(e.x, e.y);
+                ctx.lineTo(e.x - headLen * Math.cos(angle - Math.PI / 6), e.y - headLen * Math.sin(angle - Math.PI / 6));
+                ctx.moveTo(e.x, e.y);
+                ctx.lineTo(e.x - headLen * Math.cos(angle + Math.PI / 6), e.y - headLen * Math.sin(angle + Math.PI / 6));
+                ctx.stroke();
+            } else if (type === 'rect') {
+                ctx.beginPath();
+                ctx.strokeRect(s.x, s.y, e.x - s.x, e.y - s.y);
+            } else if (type === 'ellipse') {
+                const rx = Math.abs(e.x - s.x) / 2;
+                const ry = Math.abs(e.y - s.y) / 2;
+                const cx = (s.x + e.x) / 2;
+                const cy = (s.y + e.y) / 2;
+                if (rx > 0 && ry > 0) {
+                    ctx.beginPath();
+                    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+
+        function ensureStaticAnnotationCanvas() {
+            if (!annotationCanvas) return false;
+            if (!staticAnnotationCanvas) {
+                staticAnnotationCanvas = document.createElement('canvas');
+                staticAnnotationCtx = staticAnnotationCanvas.getContext('2d');
+                staticRenderKey = '';
+            }
+            if (!staticAnnotationCtx) return false;
+            if (
+                staticAnnotationCanvas.width !== annotationCanvas.width ||
+                staticAnnotationCanvas.height !== annotationCanvas.height
+            ) {
+                staticAnnotationCanvas.width = annotationCanvas.width;
+                staticAnnotationCanvas.height = annotationCanvas.height;
+                staticRenderKey = '';
+            }
+            return true;
+        }
+
+        function redrawAnnotations() {
+            if (!annotationCtx || !annotationCanvas || !stageEl) return;
+            const ctx = annotationCtx;
+            ctx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            // Compute stage→canvas offset once per frame using live rects so that
+            // scroll, CSS padding, and all transforms are automatically included
+            const dpr = window.devicePixelRatio || 1;
+            const stageRect = stageEl.getBoundingClientRect();
+            const canvasRect = annotationCanvas.getBoundingClientRect();
+            const offsetX = (stageRect.left - canvasRect.left) * dpr;
+            const offsetY = (stageRect.top - canvasRect.top) * dpr;
+
+            const toCanvas = pt => diagramToCanvas(pt, offsetX, offsetY);
+            const renderKey =
+                annotationCanvas.width + '|' +
+                annotationCanvas.height + '|' +
+                annotationTransformRevision + '|' +
+                penStrokesRevision;
+
+            if (ensureStaticAnnotationCanvas()) {
+                if (staticRenderKey !== renderKey) {
+                    staticAnnotationCtx.clearRect(0, 0, staticAnnotationCanvas.width, staticAnnotationCanvas.height);
+                    for (const stroke of penStrokes) {
+                        if (stroke.mode === 'shape') {
+                            drawShapeOnCanvas(staticAnnotationCtx, stroke.shapeType,
+                                toCanvas(stroke.start), toCanvas(stroke.end),
+                                stroke.color, stroke.lineWidth);
+                        } else {
+                            drawSmooth(staticAnnotationCtx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
+                        }
+                    }
+                    staticRenderKey = renderKey;
+                }
+                ctx.drawImage(staticAnnotationCanvas, 0, 0);
+            } else {
+                // Fallback path if offscreen cache is unavailable.
+                for (const stroke of penStrokes) {
+                    if (stroke.mode === 'shape') {
+                        drawShapeOnCanvas(ctx, stroke.shapeType,
+                            toCanvas(stroke.start), toCanvas(stroke.end),
+                            stroke.color, stroke.lineWidth);
+                    } else {
+                        drawSmooth(ctx, stroke.points.map(toCanvas), stroke.color, stroke.lineWidth, 1.0);
+                    }
+                }
+            }
+
+            // Laser strokes with fade-out
+            const now = Date.now();
+            for (const stroke of laserStrokes) {
+                const elapsed = now - stroke.startTime;
+                const alpha = Math.max(0, 1 - elapsed / LASER_DURATION_MS);
+                if (alpha > 0) {
+                    drawLaserGlow(ctx, stroke.points.map(toCanvas), alpha);
+                }
+            }
+
+            // Active stroke being drawn right now
+            if (activeStroke) {
+                if (activeStroke.mode === 'shape') {
+                    drawShapeOnCanvas(ctx, activeStroke.shapeType,
+                        toCanvas(activeStroke.start), toCanvas(activeStroke.end),
+                        activeStroke.color, activeStroke.lineWidth);
+                } else if (activeStroke.points && activeStroke.points.length > 0) {
+                    const pts = activeStroke.points.map(toCanvas);
+                    if (activeStroke.mode === 'laser') {
+                        drawLaserGlow(ctx, pts, 1.0);
+                    } else {
+                        drawSmooth(ctx, pts, activeStroke.color, activeStroke.lineWidth, 1.0);
+                    }
+                }
+            }
+        }
+
+        function startLaserFade() {
+            if (laserAnimRafId) return;
+            function animate() {
+                const now = Date.now();
+                laserStrokes = laserStrokes.filter(s => (now - s.startTime) < LASER_DURATION_MS);
+                redrawAnnotations();
+                if (laserStrokes.length > 0) {
+                    laserAnimRafId = requestAnimationFrame(animate);
+                } else {
+                    laserAnimRafId = null;
+                }
+            }
+            laserAnimRafId = requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('beforeunload', cleanupAnnotationRuntime);
     </script>
     <style>
         * { box-sizing: border-box; }
@@ -2453,12 +3206,12 @@ export class MermaidPreviewPanel {
         }
 
         #diagram-viewport {
-            flex: 1;
             overflow: auto;
             background-color: var(--vscode-editor-background);
             cursor: -webkit-grab;
             cursor: grab;
             position: relative;
+            outline: none;
         }
 
         #diagram-stage {
@@ -2702,6 +3455,92 @@ export class MermaidPreviewPanel {
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* === ANNOTATION SYSTEM === */
+        #viewport-wrapper {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        #diagram-viewport {
+            width: 100%;
+            height: 100%;
+        }
+
+        #annotation-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            touch-action: none;
+            z-index: 5;
+            cursor: none;
+        }
+
+        .annotation-tool-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            color: var(--preview-toolbar-fg);
+            cursor: pointer;
+            padding: 3px 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 28px;
+            min-width: 28px;
+            gap: 4px;
+            font-size: 12px;
+            font-family: var(--vscode-font-family);
+            transition: background 0.15s, border-color 0.15s;
+            user-select: none;
+        }
+
+        .annotation-tool-btn:hover {
+            background-color: var(--preview-toolbar-hover-bg);
+            border-color: var(--preview-toolbar-hover-border);
+        }
+
+        .annotation-tool-btn.annotation-active {
+            background-color: color-mix(in srgb, var(--vscode-button-background) 25%, transparent);
+            border-color: var(--vscode-button-background);
+        }
+
+        .pen-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #ef4444;
+            border: 1.5px solid rgba(255, 255, 255, 0.5);
+            flex-shrink: 0;
+            transition: background-color 0.15s;
+        }
+
+        /* Suppress system cursor when annotating — canvas sets its own dot cursor */
+        body.is-annotating #diagram-viewport,
+        body.is-annotating #diagram-stage,
+        body.is-annotating #diagrams-container,
+        body.is-annotating .diagram-shell,
+        body.is-annotating .diagram-shell *,
+        body.is-annotating .diagram-content,
+        body.is-annotating .diagram-content * {
+            cursor: none !important;
+        }
+
+        body.is-annotating.is-panning #diagram-viewport,
+        body.is-annotating.is-panning #diagram-stage,
+        body.is-annotating.is-panning #diagrams-container,
+        body.is-annotating.is-panning .diagram-shell,
+        body.is-annotating.is-panning .diagram-shell *,
+        body.is-annotating.is-panning .diagram-content,
+        body.is-annotating.is-panning .diagram-content * {
+            cursor: none !important;
+        }
     </style>
 </head>
 <body class="${appearanceClass}">
@@ -2731,6 +3570,20 @@ export class MermaidPreviewPanel {
             <span class="shortcuts-icon" id="keyboard-shortcuts-icon" title="Click for keyboard shortcuts" aria-label="Keyboard shortcuts">
                 <span class="codicon codicon-keyboard" aria-hidden="true"></span>
             </span>
+        </div>
+        <div class="toolbar-group annotation-tools-group">
+            <button class="annotation-tool-btn" id="pen-btn" title="Pen (P)" aria-label="Pen annotation tool">
+                <span class="pen-dot" id="pen-dot"></span>
+            </button>
+            <button class="annotation-tool-btn" id="shape-btn" title="Shape (S — cycles arrow→line→rect→ellipse)" aria-label="Shape annotation tool">
+                <span id="shape-icon" aria-hidden="true"></span>
+            </button>
+            <button class="annotation-tool-btn" id="laser-btn" title="Laser pointer (L)" aria-label="Laser annotation tool">
+                <span class="codicon codicon-record" aria-hidden="true" style="color:#ff3333;font-size:14px;"></span>
+            </button>
+            <button class="annotation-tool-btn" id="erase-annotation-btn" title="Erase all annotations (E)" aria-label="Erase all annotations">
+                <span class="codicon codicon-clear-all" aria-hidden="true"></span>
+            </button>
         </div>
         <div class="toolbar-group dropdown">
             <button class="action-btn" id="theme-button" data-dropdown-toggle="theme">Theme <span class="codicon codicon-triangle-down dropdown-arrow" aria-hidden="true"></span></button>
@@ -2786,10 +3639,13 @@ export class MermaidPreviewPanel {
             <button data-action="refresh" title="Reload diagram from source">Reload</button>
         </div>
     </div>
-    <div id="diagram-viewport">
-        <div id="diagram-stage">
-            <div id="diagrams-container"></div>
+    <div id="viewport-wrapper">
+        <div id="diagram-viewport" tabindex="-1">
+            <div id="diagram-stage">
+                <div id="diagrams-container"></div>
+            </div>
         </div>
+        <canvas id="annotation-canvas" aria-hidden="true"></canvas>
     </div>
 </body>
 </html>`;
