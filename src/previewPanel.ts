@@ -2442,6 +2442,7 @@ export class MermaidPreviewPanel {
         let staticAnnotationCanvas = null;
         let staticAnnotationCtx = null;
         let staticRenderKey = '';
+        let mouseDrawingActive = false;
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2457,6 +2458,7 @@ export class MermaidPreviewPanel {
             annotationCanvas.addEventListener('pointerup', onAnnotationUp);
             annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
             annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
+            annotationCanvas.addEventListener('mousedown', onAnnotationMouseDown);
 
             // Populate shape icon on first render
             updateShapeIcon();
@@ -2618,6 +2620,7 @@ export class MermaidPreviewPanel {
 
         function onAnnotationDown(event) {
             if (annotationMode === 'none') return;
+            if (event.pointerType === 'mouse') return;
             event.preventDefault();
             event.stopPropagation();
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
@@ -2647,8 +2650,67 @@ export class MermaidPreviewPanel {
             redrawAnnotations();
         }
 
+        function onAnnotationMouseDown(event) {
+            if (annotationMode === 'none') return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (viewportEl) viewportEl.focus({ preventScroll: true });
+            isDrawingAnnotation = true;
+            mouseDrawingActive = true;
+            activeDrawStageRect = stageEl ? stageEl.getBoundingClientRect() : null;
+            const pt = getAnnotationPoint(event);
+            if (annotationMode === 'shape') {
+                activeStroke = {
+                    mode: 'shape',
+                    shapeType: currentShape,
+                    start: pt,
+                    end: pt,
+                    color: PEN_COLORS[penColorIdx],
+                    lineWidth: 3
+                };
+            } else {
+                activeStroke = {
+                    points: [pt],
+                    color: annotationMode === 'laser' ? LASER_COLOR : PEN_COLORS[penColorIdx],
+                    lineWidth: annotationMode === 'laser' ? 4 : 3,
+                    mode: annotationMode,
+                    startTime: null
+                };
+            }
+            window.addEventListener('mousemove', onWindowMouseMove, { passive: false });
+            window.addEventListener('mouseup', onWindowMouseUp, { passive: false });
+            redrawAnnotations();
+        }
+
+        function onWindowMouseMove(event) {
+            if (!mouseDrawingActive || !isDrawingAnnotation || !activeStroke) return;
+            if ((event.buttons & 1) === 0) {
+                onWindowMouseUp(event);
+                return;
+            }
+            event.preventDefault();
+            const pt = getAnnotationPoint(event);
+            if (activeStroke.mode === 'shape') {
+                activeStroke.end = pt;
+            } else {
+                activeStroke.points.push(pt);
+            }
+            scheduleAnnotationRedraw();
+        }
+
+        function onWindowMouseUp(event) {
+            if (!mouseDrawingActive) return;
+            window.removeEventListener('mousemove', onWindowMouseMove);
+            window.removeEventListener('mouseup', onWindowMouseUp);
+            mouseDrawingActive = false;
+            if (isDrawingAnnotation && activeStroke) {
+                onAnnotationUp(event);
+            }
+        }
+
         function onAnnotationMove(event) {
             if (!isDrawingAnnotation || !activeStroke) return;
+            if (mouseDrawingActive) return;
             event.preventDefault();
             const pt = getAnnotationPoint(event);
             if (activeStroke.mode === 'shape') {
@@ -2681,6 +2743,11 @@ export class MermaidPreviewPanel {
             }
             activeStroke = null;
             activeDrawStageRect = null;
+            if (mouseDrawingActive) {
+                window.removeEventListener('mousemove', onWindowMouseMove);
+                window.removeEventListener('mouseup', onWindowMouseUp);
+                mouseDrawingActive = false;
+            }
             scheduleAnnotationRedraw();
         }
 
@@ -3343,6 +3410,7 @@ export class MermaidPreviewPanel {
             width: 100%;
             height: 100%;
             pointer-events: none;
+            touch-action: none;
             z-index: 5;
             cursor: none;
         }
