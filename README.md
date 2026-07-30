@@ -21,7 +21,7 @@ A VSCode extension that gives you a powerful viewer for Mermaid diagrams with in
 - **Format Diagram**: Tidy a diagram's indentation and whitespace via CodeLens, command palette, or context menu. Standalone `.mmd`/`.mermaid` files also work with VS Code's built-in *Format Document* (`Shift+Alt+F`). Formatting is conservative and works across diagram types - it normalizes nesting indentation (flowchart `subgraph`/`end`, sequence `loop`/`alt`/`opt`/`par`/`critical`, class/state/ER/C4 braces, `block` groups, `gantt`/`journey` sections, multi-line state notes), trims trailing whitespace, and collapses blank lines without altering the diagram. Re-indenting is applied only to recognized structural diagram types; types where indentation is meaningful (`mindmap`, `kanban`, `treemap`, `sankey`) and any unrecognized diagram type are left un-indented on purpose - only trailing whitespace is trimmed
 - **Formatting Diagnostics**: Lines that don't match the formatting rules get a warning squiggle. Use the lightbulb (Quick Fix) on a squiggle to **Fix formatting on this line** (one at a time) or **Format Mermaid diagram** (the whole block at once). Toggle with `mermaidViewer.format.diagnostics`
 - **ELK Layout Support**: Use the [ELK layout engine](https://eclipse.dev/elk/) for complex diagrams by adding `layout: elk` frontmatter - works with ER diagrams, flowcharts, and more. Loaded on demand, so there is no cost for diagrams that use the default layout
-- **Annotation Tools**: Draw directly on diagrams with pen (red/blue/green), laser pointer with fade-out, and shape tools (arrows, lines, rectangles, ellipses). Keyboard shortcuts make annotation fast: **P** for pen, **L** for laser, **S** for shapes, **R/G/B** to cycle colors, **E** to erase all
+- **Annotation Tools**: Draw directly on diagrams with pen (red/blue/green), laser pointer with fade-out, and shape tools (arrows, lines, rectangles, ellipses). Keyboard shortcuts make annotation fast: **P** for pen, **L** for laser, **S** for shapes, **R/G/B** to cycle colors for both pen and shape tools, **E** to erase all
 - **Offline Friendly**: Bundles Mermaid locally, so previews work without a network connection or account
 
 ## Demo
@@ -107,14 +107,18 @@ ELK also supports several sub-algorithms via `layout: elk.<algorithm>`:
 
 ### Annotation Tools
 
-The preview panel includes drawing and annotation tools for marking up diagrams in real-time. All tools have smooth anti-aliased rendering and respect the current zoom level.
+Newly added annotation tools allow you to walk through service boundaries, data flows, and integration points live while drawing arrows and highlights directly on the diagram, and there is also a laser pointer to focus attention during presentations.
+
+All tools have smooth anti-aliased rendering and respect the current zoom level.
+
+![Annotation Tools](https://raw.githubusercontent.com/onlyutkarsh/mermaid-viewer/main/marketplace/annotate-demo.png)
 
 #### Pen Tool
 
 Draw freehand strokes on the diagram with a smooth brush.
 
 - **Activate**: Press `P` or click the pen button in the toolbar
-- **Colors**: Press `R` (red), `G` (green), or `B` (blue) to change color; the dot icon shows the active color
+- **Colors**: Press `R` (red), `G` (green), or `B` (blue) to change color for pen and shape tools; the dot icon shows the active color
 - **Draw**: Click and drag to draw
 - **Persistent**: Strokes remain on the diagram until erased
 
@@ -132,7 +136,7 @@ Draw geometric shapes: arrows, lines, rectangles, and ellipses.
 
 - **Activate**: Press `S` or click the shape button
 - **Cycle shapes**: Press `S` again to cycle through arrow → line → rectangle → ellipse
-- **Colors**: Press `R`, `G`, or `B` to set color before drawing
+- **Colors**: Press `R`, `G`, or `B` to set color before drawing (same shortcuts as the pen tool)
 - **Draw**: Click and drag from start to end point
 
 #### Erase All
