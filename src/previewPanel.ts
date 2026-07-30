@@ -2631,7 +2631,7 @@ export class MermaidPreviewPanel {
                 };
             }
             annotationCanvas.setPointerCapture(event.pointerId);
-            scheduleAnnotationRedraw();
+            requestAnnotationRedraw(true);
         }
 
         function onAnnotationMove(event) {
@@ -2643,7 +2643,7 @@ export class MermaidPreviewPanel {
             } else {
                 activeStroke.points.push(pt);
             }
-            scheduleAnnotationRedraw();
+            requestAnnotationRedraw(false);
         }
 
         function onAnnotationUp(event) {
@@ -2663,13 +2663,25 @@ export class MermaidPreviewPanel {
                 }
             }
             activeStroke = null;
-            scheduleAnnotationRedraw();
+            requestAnnotationRedraw(false);
         }
 
         function onAnnotationLeave(event) {
             if (isDrawingAnnotation) {
                 onAnnotationUp(event);
             }
+        }
+
+        function requestAnnotationRedraw(immediate) {
+            if (immediate) {
+                if (pendingAnnotationRedraw) {
+                    cancelAnimationFrame(pendingAnnotationRedraw);
+                    pendingAnnotationRedraw = null;
+                }
+                redrawAnnotations();
+                return;
+            }
+            scheduleAnnotationRedraw();
         }
 
         function scheduleAnnotationRedraw() {
@@ -3282,6 +3294,7 @@ export class MermaidPreviewPanel {
             width: 100%;
             height: 100%;
             pointer-events: none;
+            touch-action: none;
             z-index: 5;
             cursor: none;
         }
