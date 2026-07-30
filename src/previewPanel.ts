@@ -1243,12 +1243,11 @@ export class MermaidPreviewPanel {
         }
 
         async function updateDiagramsInPlace(newDiagrams) {
-            // Clear annotations when diagrams are updated
-            if (annotationCanvas) {
-                eraseAllAnnotations();
-            }
-
             if (newDiagrams.length !== diagrams.length) {
+                // Diagram count changed, clear annotations
+                if (annotationCanvas) {
+                    eraseAllAnnotations();
+                }
                 diagrams.length = 0;
                 diagrams.push(...newDiagrams);
                 await renderAllDiagrams();
@@ -1261,6 +1260,11 @@ export class MermaidPreviewPanel {
                     changed.push(i);
                     diagrams[i] = newDiagrams[i];
                 }
+            }
+
+            // Only clear annotations if diagrams actually changed
+            if (changed.length > 0 && annotationCanvas) {
+                eraseAllAnnotations();
             }
 
             for (const i of changed) {
@@ -1296,11 +1300,6 @@ export class MermaidPreviewPanel {
         }
 
         async function renderAllDiagrams() {
-            // Clear annotations when diagrams are re-rendered
-            if (annotationCanvas) {
-                eraseAllAnnotations();
-            }
-
             const container = document.getElementById('diagrams-container');
             container.innerHTML = '';
 
@@ -1317,6 +1316,11 @@ export class MermaidPreviewPanel {
                     message: 'No diagrams found in document'
                 });
                 return;
+            }
+
+            // Clear annotations when doing a full re-render
+            if (annotationCanvas) {
+                eraseAllAnnotations();
             }
 
             // Create all shells upfront so loading spinners appear immediately
