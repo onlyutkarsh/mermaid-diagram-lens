@@ -1,3 +1,18 @@
+## [2.2.0](https://github.com/onlyutkarsh/mermaid-viewer/compare/v2.1.4...v2.2.0) (2026-07-30)
+
+
+### Bug Fixes
+
+* only clear annotations when diagrams actually change ([2f79ada](https://github.com/onlyutkarsh/mermaid-viewer/commit/2f79ada83bcff47e69fc61fbec28e05031f5ef6e))
+
+
+### Features
+
+* automatically clear annotations when diagram is edited ([9226a89](https://github.com/onlyutkarsh/mermaid-viewer/commit/9226a89a06ca69c840e45019feddf5a01227860f))
+* **docs:** enhance README and add example diagrams ([f43fffd](https://github.com/onlyutkarsh/mermaid-viewer/commit/f43fffd13b3e212ea152011e604d3354f07f1e72))
+
+
+
 ## [2.1.4](https://github.com/onlyutkarsh/mermaid-viewer/compare/v2.1.3...v2.1.4) (2026-07-28)
 
 
