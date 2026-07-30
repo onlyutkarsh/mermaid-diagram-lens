@@ -361,12 +361,6 @@ export class MermaidPreviewPanel {
 							stack: message.stack ?? 'no-stack',
 						});
 						break;
-					case 'annotationPerf':
-						this._logger.logInfo('AnnotationPerf', {
-							document: this._currentDocument?.uri.toString() ?? 'unknown',
-							...message,
-						});
-						break;
 					case 'lifecycleEvent':
 						this._logger.logDebug(
 							'WebviewLifecycle',
@@ -2440,26 +2434,6 @@ export class MermaidPreviewPanel {
         let laserStrokes = [];      // laser strokes pending fade-out
         let laserAnimRafId = null;
         let pendingAnnotationRedraw = null;
-        let pendingAnnotationScheduledAt = 0;
-        const ANNOTATION_DPR_CAP = 1;
-        const PERF_LOG_INTERVAL_MS = 1000;
-        let annotationStrokeSeq = 0;
-        let activeStrokePerf = null;
-        let lastPerfProgressAt = 0;
-        let usingRawPointerInput = false;
-        let windowMouseTracking = false;
-
-        function postAnnotationPerf(event, data = {}) {
-            vscode.postMessage({
-                command: 'annotationPerf',
-                event,
-                ...data
-            });
-        }
-
-        function getAnnotationDpr() {
-            return Math.min(window.devicePixelRatio || 1, ANNOTATION_DPR_CAP);
-        }
 
         function initAnnotationCanvas() {
             annotationCanvas = document.getElementById('annotation-canvas');
@@ -2472,44 +2446,34 @@ export class MermaidPreviewPanel {
 
             annotationCanvas.addEventListener('pointerdown', onAnnotationDown);
             annotationCanvas.addEventListener('pointermove', onAnnotationMove);
-            annotationCanvas.addEventListener('pointerrawupdate', onAnnotationMove);
             annotationCanvas.addEventListener('pointerup', onAnnotationUp);
             annotationCanvas.addEventListener('pointerleave', onAnnotationLeave);
             annotationCanvas.addEventListener('pointercancel', onAnnotationUp);
 
             // Populate shape icon on first render
             updateShapeIcon();
-            postAnnotationPerf('canvasInit', {
-                dpr: window.devicePixelRatio || 1,
-                width: annotationCanvas.width,
-                height: annotationCanvas.height
-            });
         }
 
         function resizeAnnotationCanvas(wrapper) {
             if (!annotationCanvas) return;
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             annotationCanvas.width = wrapper.clientWidth * dpr;
             annotationCanvas.height = wrapper.clientHeight * dpr;
             scheduleAnnotationRedraw();
         }
 
-        function getAnnotationPointFromClient(clientX, clientY) {
+        function getAnnotationPoint(event) {
             // Use the stage's actual screen rect so scroll, padding and CSS
             // transforms are all accounted for — works correctly at any zoom level
             const stageRect = stageEl.getBoundingClientRect();
             return {
-                x: (clientX - stageRect.left) / currentZoom,
-                y: (clientY - stageRect.top) / currentZoom
+                x: (event.clientX - stageRect.left) / currentZoom,
+                y: (event.clientY - stageRect.top) / currentZoom
             };
         }
 
-        function getAnnotationPoint(event) {
-            return getAnnotationPointFromClient(event.clientX, event.clientY);
-        }
-
         function diagramToCanvas(pt, offsetX, offsetY) {
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             return {
                 x: offsetX + pt.x * currentZoom * dpr,
                 y: offsetY + pt.y * currentZoom * dpr
@@ -2629,7 +2593,7 @@ export class MermaidPreviewPanel {
         }
 
         const SHAPE_ICONS = {
-            arrow: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="13" x2="13" y2="3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><polyline points="13,3 7,3 13,9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>',
+            arrow: '<span style="font-size:14px;line-height:1;" aria-hidden="true">↗</span>',
             line:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
             rect:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="12" height="9" stroke="currentColor" stroke-width="1.8" rx="0.5" fill="none"/></svg>',
             ellipse: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="8" cy="8" rx="6" ry="4.5" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>'
@@ -2647,28 +2611,6 @@ export class MermaidPreviewPanel {
             // Ensure DOM focus so keyboard shortcuts keep working while annotating
             if (viewportEl) viewportEl.focus({ preventScroll: true });
             isDrawingAnnotation = true;
-            usingRawPointerInput = false;
-            annotationStrokeSeq += 1;
-            activeStrokePerf = {
-                id: annotationStrokeSeq,
-                mode: annotationMode,
-                shapeType: annotationMode === 'shape' ? currentShape : null,
-                pointerType: event.pointerType || 'unknown',
-                startTs: performance.now(),
-                moves: 0,
-                redraws: 0,
-                redrawTotalMs: 0,
-                redrawMaxMs: 0,
-                pointCalcTotalMs: 0,
-                scheduleSkips: 0,
-                eventLagTotalMs: 0,
-                eventLagMaxMs: 0,
-                rafQueueTotalMs: 0,
-                rafQueueMaxMs: 0,
-                rafQueueSamples: 0,
-                firstPaintMs: null
-            };
-            lastPerfProgressAt = 0;
             const pt = getAnnotationPoint(event);
             if (annotationMode === 'shape') {
                 activeStroke = {
@@ -2688,120 +2630,24 @@ export class MermaidPreviewPanel {
                     startTime: null
                 };
             }
-            if (event.pointerType !== 'mouse') {
-                annotationCanvas.setPointerCapture(event.pointerId);
-            } else {
-                if (!windowMouseTracking) {
-                    window.addEventListener('mousemove', onWindowMouseMove, { passive: false });
-                    window.addEventListener('mouseup', onWindowMouseUp, { passive: false });
-                    windowMouseTracking = true;
-                }
-            }
-            requestAnnotationRedraw(true);
-            postAnnotationPerf('strokeStart', {
-                id: activeStrokePerf.id,
-                mode: activeStrokePerf.mode,
-                shapeType: activeStrokePerf.shapeType,
-                pointerType: activeStrokePerf.pointerType,
-                zoom: currentZoom
-            });
+            annotationCanvas.setPointerCapture(event.pointerId);
+            scheduleAnnotationRedraw();
         }
 
-        function processAnnotationMoveSample(clientX, clientY, sampleTimeStamp) {
-            const pointStart = performance.now();
-            const pt = getAnnotationPointFromClient(clientX, clientY);
-            const pointElapsed = performance.now() - pointStart;
-            if (activeStrokePerf) {
-                activeStrokePerf.moves += 1;
-                activeStrokePerf.pointCalcTotalMs += pointElapsed;
-                const eventLagMs = Math.max(0, performance.now() - sampleTimeStamp);
-                activeStrokePerf.eventLagTotalMs += eventLagMs;
-                if (eventLagMs > activeStrokePerf.eventLagMaxMs) {
-                    activeStrokePerf.eventLagMaxMs = eventLagMs;
-                }
-            }
+        function onAnnotationMove(event) {
+            if (!isDrawingAnnotation || !activeStroke) return;
+            event.preventDefault();
+            const pt = getAnnotationPoint(event);
             if (activeStroke.mode === 'shape') {
                 activeStroke.end = pt;
             } else {
                 activeStroke.points.push(pt);
             }
-        }
-
-        function onWindowMouseMove(event) {
-            if (!isDrawingAnnotation || !activeStroke || activeStrokePerf?.pointerType !== 'mouse') return;
-            event.preventDefault();
-            processAnnotationMoveSample(event.clientX, event.clientY, event.timeStamp);
-            requestAnnotationRedraw(true);
-        }
-
-        function onWindowMouseUp(event) {
-            if (!windowMouseTracking) return;
-            window.removeEventListener('mousemove', onWindowMouseMove);
-            window.removeEventListener('mouseup', onWindowMouseUp);
-            windowMouseTracking = false;
-            if (isDrawingAnnotation && activeStrokePerf?.pointerType === 'mouse') {
-                onAnnotationUp(event);
-            }
-        }
-
-        function onAnnotationMove(event) {
-            if (!isDrawingAnnotation || !activeStroke) return;
-            if (activeStrokePerf?.pointerType === 'mouse') {
-                return;
-            }
-            if (event.type === 'pointerrawupdate') {
-                usingRawPointerInput = true;
-            } else if (usingRawPointerInput) {
-                // Avoid duplicate processing when raw updates are available.
-                return;
-            }
-            if (event.cancelable) {
-                event.preventDefault();
-            }
-
-            const events = (typeof event.getCoalescedEvents === 'function')
-                ? event.getCoalescedEvents()
-                : [event];
-            const samples = events.length > 0 ? events : [event];
-
-            for (const sample of samples) {
-                processAnnotationMoveSample(sample.clientX, sample.clientY, sample.timeStamp);
-            }
-            requestAnnotationRedraw(true);
-            const now = performance.now();
-            if (activeStrokePerf && (now - lastPerfProgressAt) >= PERF_LOG_INTERVAL_MS) {
-                lastPerfProgressAt = now;
-                postAnnotationPerf('strokeProgress', {
-                    id: activeStrokePerf.id,
-                    mode: activeStrokePerf.mode,
-                    moves: activeStrokePerf.moves,
-                    redraws: activeStrokePerf.redraws,
-                    avgRedrawMs: activeStrokePerf.redraws > 0
-                        ? Number((activeStrokePerf.redrawTotalMs / activeStrokePerf.redraws).toFixed(2))
-                        : 0,
-                    maxRedrawMs: Number(activeStrokePerf.redrawMaxMs.toFixed(2)),
-                    avgPointCalcMs: activeStrokePerf.moves > 0
-                        ? Number((activeStrokePerf.pointCalcTotalMs / activeStrokePerf.moves).toFixed(3))
-                        : 0,
-                    avgEventLagMs: activeStrokePerf.moves > 0
-                        ? Number((activeStrokePerf.eventLagTotalMs / activeStrokePerf.moves).toFixed(2))
-                        : 0,
-                    maxEventLagMs: Number(activeStrokePerf.eventLagMaxMs.toFixed(2)),
-                    avgRafQueueMs: activeStrokePerf.rafQueueSamples > 0
-                        ? Number((activeStrokePerf.rafQueueTotalMs / activeStrokePerf.rafQueueSamples).toFixed(2))
-                        : 0,
-                    maxRafQueueMs: Number(activeStrokePerf.rafQueueMaxMs.toFixed(2)),
-                    firstPaintMs: activeStrokePerf.firstPaintMs === null
-                        ? null
-                        : Number(activeStrokePerf.firstPaintMs.toFixed(2)),
-                    scheduleSkips: activeStrokePerf.scheduleSkips
-                });
-            }
+            scheduleAnnotationRedraw();
         }
 
         function onAnnotationUp(event) {
             if (!isDrawingAnnotation || !activeStroke) return;
-            const perfInfo = activeStrokePerf;
             isDrawingAnnotation = false;
             if (activeStroke.mode === 'shape') {
                 penStrokes.push(activeStroke);
@@ -2816,50 +2662,8 @@ export class MermaidPreviewPanel {
                     startLaserFade();
                 }
             }
-            if (perfInfo) {
-                const durationMs = performance.now() - perfInfo.startTs;
-                const pointCount = activeStroke.mode === 'shape'
-                    ? 2
-                    : (activeStroke.points ? activeStroke.points.length : 0);
-                postAnnotationPerf('strokeEnd', {
-                    id: perfInfo.id,
-                    mode: perfInfo.mode,
-                    shapeType: perfInfo.shapeType,
-                    pointerType: perfInfo.pointerType,
-                    durationMs: Number(durationMs.toFixed(2)),
-                    moves: perfInfo.moves,
-                    pointCount,
-                    redraws: perfInfo.redraws,
-                    avgRedrawMs: perfInfo.redraws > 0
-                        ? Number((perfInfo.redrawTotalMs / perfInfo.redraws).toFixed(2))
-                        : 0,
-                    maxRedrawMs: Number(perfInfo.redrawMaxMs.toFixed(2)),
-                    avgPointCalcMs: perfInfo.moves > 0
-                        ? Number((perfInfo.pointCalcTotalMs / perfInfo.moves).toFixed(3))
-                        : 0,
-                    avgEventLagMs: perfInfo.moves > 0
-                        ? Number((perfInfo.eventLagTotalMs / perfInfo.moves).toFixed(2))
-                        : 0,
-                    maxEventLagMs: Number(perfInfo.eventLagMaxMs.toFixed(2)),
-                    avgRafQueueMs: perfInfo.rafQueueSamples > 0
-                        ? Number((perfInfo.rafQueueTotalMs / perfInfo.rafQueueSamples).toFixed(2))
-                        : 0,
-                    maxRafQueueMs: Number(perfInfo.rafQueueMaxMs.toFixed(2)),
-                    firstPaintMs: perfInfo.firstPaintMs === null
-                        ? null
-                        : Number(perfInfo.firstPaintMs.toFixed(2)),
-                    scheduleSkips: perfInfo.scheduleSkips
-                });
-            }
             activeStroke = null;
-            activeStrokePerf = null;
-            usingRawPointerInput = false;
-            if (windowMouseTracking) {
-                window.removeEventListener('mousemove', onWindowMouseMove);
-                window.removeEventListener('mouseup', onWindowMouseUp);
-                windowMouseTracking = false;
-            }
-            requestAnnotationRedraw(true);
+            scheduleAnnotationRedraw();
         }
 
         function onAnnotationLeave(event) {
@@ -2868,36 +2672,17 @@ export class MermaidPreviewPanel {
             }
         }
 
-        function requestAnnotationRedraw(immediate) {
-            if (immediate) {
-                if (pendingAnnotationRedraw) {
-                    cancelAnimationFrame(pendingAnnotationRedraw);
-                    pendingAnnotationRedraw = null;
-                }
-                pendingAnnotationScheduledAt = 0;
-                redrawAnnotations();
-                return;
-            }
-            scheduleAnnotationRedraw();
-        }
-
         function scheduleAnnotationRedraw() {
-            if (pendingAnnotationRedraw) {
-                if (activeStrokePerf) {
-                    activeStrokePerf.scheduleSkips += 1;
-                }
-                return;
-            }
+            if (pendingAnnotationRedraw) return;
             pendingAnnotationRedraw = requestAnimationFrame(() => {
                 pendingAnnotationRedraw = null;
                 redrawAnnotations();
             });
-            pendingAnnotationScheduledAt = performance.now();
         }
 
         function drawSmooth(ctx, points, color, logicalLineWidth, alpha) {
             if (points.length === 0) return;
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             const lw = logicalLineWidth * dpr;
 
             ctx.save();
@@ -2935,7 +2720,7 @@ export class MermaidPreviewPanel {
 
         function drawLaserGlow(ctx, points, alpha) {
             if (points.length === 0) return;
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
 
             // Pass 1 — wide soft halo
             ctx.save();
@@ -2978,7 +2763,7 @@ export class MermaidPreviewPanel {
         }
 
         function drawShapeOnCanvas(ctx, type, s, e, color, logicalLineWidth) {
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             const lw = logicalLineWidth * dpr;
             ctx.save();
             ctx.strokeStyle = color;
@@ -2997,7 +2782,7 @@ export class MermaidPreviewPanel {
                 ctx.lineTo(e.x, e.y);
                 ctx.stroke();
                 const angle = Math.atan2(e.y - s.y, e.x - s.x);
-                const headLen = Math.max(12 * dpr, Math.hypot(e.x - s.x, e.y - s.y) * 0.2);
+                const headLen = 14 * dpr;
                 ctx.beginPath();
                 ctx.moveTo(e.x, e.y);
                 ctx.lineTo(e.x - headLen * Math.cos(angle - Math.PI / 6), e.y - headLen * Math.sin(angle - Math.PI / 6));
@@ -3023,7 +2808,6 @@ export class MermaidPreviewPanel {
 
         function redrawAnnotations() {
             if (!annotationCtx || !annotationCanvas || !stageEl) return;
-            const redrawStartedAt = performance.now();
             const ctx = annotationCtx;
             ctx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
             ctx.imageSmoothingEnabled = true;
@@ -3031,7 +2815,7 @@ export class MermaidPreviewPanel {
 
             // Compute stage→canvas offset once per frame using live rects so that
             // scroll, CSS padding, and all transforms are automatically included
-            const dpr = getAnnotationDpr();
+            const dpr = window.devicePixelRatio || 1;
             const stageRect = stageEl.getBoundingClientRect();
             const canvasRect = annotationCanvas.getBoundingClientRect();
             const offsetX = (stageRect.left - canvasRect.left) * dpr;
@@ -3074,26 +2858,6 @@ export class MermaidPreviewPanel {
                         drawSmooth(ctx, pts, activeStroke.color, activeStroke.lineWidth, 1.0);
                     }
                 }
-                if (activeStrokePerf) {
-                    if (activeStrokePerf.firstPaintMs === null) {
-                        activeStrokePerf.firstPaintMs = redrawStartedAt - activeStrokePerf.startTs;
-                    }
-                    if (pendingAnnotationScheduledAt > 0) {
-                        const rafQueueMs = Math.max(0, redrawStartedAt - pendingAnnotationScheduledAt);
-                        activeStrokePerf.rafQueueSamples += 1;
-                        activeStrokePerf.rafQueueTotalMs += rafQueueMs;
-                        if (rafQueueMs > activeStrokePerf.rafQueueMaxMs) {
-                            activeStrokePerf.rafQueueMaxMs = rafQueueMs;
-                        }
-                    }
-                    const redrawMs = performance.now() - redrawStartedAt;
-                    activeStrokePerf.redraws += 1;
-                    activeStrokePerf.redrawTotalMs += redrawMs;
-                    if (redrawMs > activeStrokePerf.redrawMaxMs) {
-                        activeStrokePerf.redrawMaxMs = redrawMs;
-                    }
-                }
-                pendingAnnotationScheduledAt = 0;
             }
         }
 
@@ -3518,7 +3282,6 @@ export class MermaidPreviewPanel {
             width: 100%;
             height: 100%;
             pointer-events: none;
-            touch-action: none;
             z-index: 5;
             cursor: none;
         }
