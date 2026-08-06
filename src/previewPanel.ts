@@ -1449,6 +1449,9 @@ export class MermaidPreviewPanel {
             if (annotationMode !== 'none') {
                 return;
             }
+            if (event.ctrlKey || event.metaKey) {
+                return;
+            }
             if (event.target.closest('.dropdown') || event.target.closest('.toolbar') || event.target.closest('.diagram-error')) {
                 return;
             }
@@ -2323,6 +2326,7 @@ export class MermaidPreviewPanel {
                     case 'escape':
                         event.preventDefault();
                         setAnnotationMode('none');
+                        window.getSelection()?.removeAllRanges();
                         break;
 
                     // Pan with arrow keys (smooth movement)
@@ -2354,6 +2358,23 @@ export class MermaidPreviewPanel {
                         saveInteractionState();
                         break;
                 }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Control' || event.key === 'Meta') {
+                    document.body.classList.add('is-selecting');
+                }
+            });
+
+            document.addEventListener('keyup', (event) => {
+                if (event.key === 'Control' || event.key === 'Meta') {
+                    document.body.classList.remove('is-selecting');
+                }
+            });
+
+            // Clear when window loses focus (e.g. Alt+Tab while Ctrl held)
+            window.addEventListener('blur', () => {
+                document.body.classList.remove('is-selecting');
             });
         }
 
@@ -3540,6 +3561,26 @@ export class MermaidPreviewPanel {
         body.is-annotating.is-panning .diagram-content,
         body.is-annotating.is-panning .diagram-content * {
             cursor: none !important;
+        }
+
+        body.is-selecting #diagram-viewport,
+        body.is-selecting #diagram-stage,
+        body.is-selecting #diagrams-container,
+        body.is-selecting .diagram-shell,
+        body.is-selecting .diagram-shell *,
+        body.is-selecting .diagram-content,
+        body.is-selecting .diagram-content * {
+            cursor: text !important;
+            user-select: text !important;
+        }
+
+        #diagram-viewport ::selection,
+        #diagram-stage ::selection,
+        #diagrams-container ::selection,
+        .diagram-shell ::selection,
+        .diagram-content ::selection {
+            background-color: color-mix(in srgb, var(--vscode-editor-selectionBackground, #ADD6FF) 25%, transparent);
+            color: inherit;
         }
     </style>
 </head>
