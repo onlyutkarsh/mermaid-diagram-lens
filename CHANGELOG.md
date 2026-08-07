@@ -1,3 +1,12 @@
+## [2.2.1](https://github.com/onlyutkarsh/mermaid-viewer/compare/v2.2.0...v2.2.1) (2026-08-07)
+
+
+### Features
+
+* **ui:** enhance selection handling for diagram interactions ([5df9d7c](https://github.com/onlyutkarsh/mermaid-viewer/commit/5df9d7cb825cf604019ac0609a47b196e6404f82))
+
+
+
 ## [2.2.0](https://github.com/onlyutkarsh/mermaid-viewer/compare/v2.1.4...v2.2.0) (2026-07-30)
 
 
